@@ -81,7 +81,7 @@ fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
 	if html.contains(&needle) {
 		return true;
 	}
-	html.contains("下一頁") || html.contains("Next")
+	html.contains("下一�?) || html.contains("Next")
 }
 
 // ---------- Home parsing ----------
@@ -95,10 +95,10 @@ fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
 type SectionSpec = (&'static [&'static str], &'static [&'static str], bool);
 const HOME_SECTIONS: &[SectionSpec] = &[
 	(&["正熱門"],     &["當下超高人氣作品"], true),  // Trending
-	(&["今日最佳"], &["今日爆款"],         true),  // Today best
-	(&["最近更新"], &["每日多次更新"], true), // Recently updated
-	(&["本週熱門"], &["本週最熱漫畫"], true),  // Weekly trending
-	(&["已完結"], &["完結精選"], true), // Completed (simp/trad)
+	(&["今日最�?], &["今日爆款"],         true),  // Today best
+	(&["最近更�?], &["每日多次更新"], true), // Recently updated
+	(&["本週熱門"], &["本週最熱漫�?], true),  // Weekly trending
+	(&["已完�?], &["完結精選"], true), // Completed (simp/trad)
 ];
 
 
@@ -465,7 +465,7 @@ fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 			}
 		}
 		// Use the first subtitle variant that the page shows (just use the first
-		// one in our list for now — the page usually only shows one).
+		// one in our list for now �?the page usually only shows one).
 		let subtitle = subtitles.first().map(|s| String::from(*s));
 		components.push(HomeComponent {
 			title: Some(String::from(used_title)),
@@ -498,7 +498,7 @@ fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageRe
 			Some(h) => h,
 			None => continue,
 		};
-		// /books/{id} has 2 slashes; /books/{id}/{N} has 3 — keep only manga entries
+		// /books/{id} has 2 slashes; /books/{id}/{N} has 3 �?keep only manga entries
 		if href.matches('/').count() != 2 {
 			continue;
 		}
@@ -509,7 +509,7 @@ fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageRe
 		if seen.contains(&key) {
 			continue;
 		}
-		// title — the card has either a mobile variant or a desktop variant
+		// title �?the card has either a mobile variant or a desktop variant
 		let title_el = a
 			.select_first("div.truncate.text-foreground, div.line-clamp-2")
 			.or_else(|| a.select_first("div[class*=\"text-foreground\"]"));
@@ -608,7 +608,7 @@ fn json_string(haystack: &str, key: &str) -> Option<String> {
 	Some(out)
 }
 
-// "第N話 ..." -> (N, "...") where 第 = U+7B2C, 話 = U+8A71
+// "第N�?..." -> (N, "...") where �?= U+7B2C, �?= U+8A71
 fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
 	let bytes = s.as_bytes();
 	let mut i = 0;
@@ -649,7 +649,7 @@ fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
 	let mut title: String = s[title_start..].chars().take(200).collect();
 	if title_trimmed {
 		while let Some(first) = title.chars().next() {
-			if matches!(first, ' ' | '-' | ':' | '：' | '~' | '_') {
+			if matches!(first, ' ' | '-' | ':' | '�? | '~' | '_') {
 				title = title[first.len_utf8()..].to_string();
 			} else {
 				break;
@@ -695,10 +695,10 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 		}
 	}
 
-	// status: scan the rendered body for "狀態:" then read the next <span class="text-foreground">
+	// status: scan the rendered body for "狀�?" then read the next <span class="text-foreground">
 	let mut status = MangaStatus::Unknown;
-	if let Some(idx) = html.find("狀態:") {
-		// Scan a bounded window for the first <span class="text-foreground">…</span>
+	if let Some(idx) = html.find("狀�?") {
+		// Scan a bounded window for the first <span class="text-foreground">�?/span>
 		// without ever doing byte-offset slicing (CJK text breaks the char boundary
 		// if we slice into a multi-byte codepoint).
 		let window = &html[idx..html.len().min(idx + 1200)];
@@ -713,7 +713,7 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 			if let Some(close_rel) = after.find("</span>") {
 				let val = &after[..close_rel];
 				let val = val.trim();
-				if val.contains("連載中") {
+				if val.contains("連載�?) {
 					status = MangaStatus::Ongoing;
 				} else if val.contains("完結") {
 					status = MangaStatus::Completed;
@@ -724,7 +724,7 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 		}
 	}
 
-	// chapter list — anchors with href="/books/{key}/{N}"
+	// chapter list �?anchors with href="/books/{key}/{N}"
 	let mut chapters: Vec<Chapter> = Vec::new();
 	let needle = format!("href=\"/books/{}/", key);
 	let mut search_from = 0;
@@ -848,7 +848,7 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 	}
 
 	// Determine the page count. Prefer JSON-LD, then the rendered counter
-	// `1<!-- -->/<!-- -->N<!-- -->頁`, then the RSC fragment `"/",N,"頁"`.
+	// `1<!-- -->/<!-- -->N<!-- -->頁`, then the RSC fragment `"/",N,"�?`.
 	let mut page_count: i32 = {
 		let json_ld_raw = slice_between(html, "<script type=\"application/ld+json\">", "</script>")
 			.unwrap_or("")
@@ -881,7 +881,7 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 			// page number already consumed by the React render. Strip any leading digits
 			// (the "current page"), then verify a `<!-- -->頁` follows.
 			let after_digits: String = head.chars().skip_while(|c| c.is_ascii_digit()).collect();
-			if let Some(d_end) = after_digits.find("<!-- -->頁") {
+			if let Some(d_end) = after_digits.find("<!-- -->�?) {
 				let digits: String = after_digits[..d_end].chars().take_while(|c| c.is_ascii_digit()).collect();
 				if let Ok(n) = digits.parse::<i32>() {
 					page_count = n;
@@ -892,7 +892,7 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 		}
 	}
 	if page_count == 0 {
-		// The RSC counter is `"<a>","/","<b>","頁"` (4 quoted strings). We require
+		// The RSC counter is `"<a>","/","<b>","�?` (4 quoted strings). We require
 		// the `頁` to follow within a few tokens to avoid matching unrelated `/,`.
 		let mut i = 0;
 		while let Some(rel) = payload[i..].find("\"/\",") {
@@ -1022,7 +1022,7 @@ impl Source for Roumanwu {
 		let (page_count, mut urls) = parse_chapter_pages(&html)?;
 
 		// The RSC payload also contains imageUrl entries for related-manga cards
-		// and recommendation thumbnails — those have ind >= page_count for a normal
+		// and recommendation thumbnails �?those have ind >= page_count for a normal
 		// chapter, so trim by index.
 		if page_count > 0 && urls.len() > page_count as usize {
 			urls.truncate(page_count as usize);
@@ -1158,213 +1158,8 @@ impl BaseUrlProvider for Roumanwu {
 // is picked up by the runner and executed against the real rouman5.com
 // service.
 
+
 #[cfg(test)]
-mod test {
-	use aidoku::alloc::{String, Vec};
-	use aidoku::{
-		ContentRating, DeepLinkHandler, DeepLinkResult, Home, HomeComponentValue,
-		Link, LinkValue, Listing, ListingProvider, Manga, MangaPageResult, MangaStatus,
-		Page, PageContent, Source, Viewer,
-	};
-	use aidoku_test::aidoku_test;
-
-	use super::Roumanwu;
-
-	fn new_source() -> Roumanwu {
-		<Roumanwu as Source>::new()
-	}
-
-#[aidoku_test]
-fn debug_home_parse() {
-		let s = new_source();
-		let layout = s.get_home().expect("get home should succeed");
-		let _ = aidoku::prelude::println!("debug_home_parse: got {} sections", layout.components.len());
-	}
-
-	#[aidoku_test]
-fn debug_home_response() {
-	use aidoku::prelude::println;
-	use aidoku::imports::net::Request;
-	let raw = Request::get("https://rouman5.com/home")
-		.expect("send")
-		.string()
-		.expect("string");
-	let _ = println!("=== HOME RAW len={} ===", raw.len());
-	let marker = String::from("<div class=\"text-2xl text-gray-900 dark:text-gray-100\">");
-	let mut i = 0;
-	while let Some(rel) = raw[i..].find(&marker) {
-		let abs = i + rel;
-		let after = &raw[abs + marker.len()..];
-		let end = after.find("</div>").unwrap_or(40);
-		let title = &after[..end.min(40)];
-		let _ = println!("  section at {}: {:?}", abs, title);
-		i = abs + 1;
-	}
-	let _ = println!("=== END ===");
-}
-	#[aidoku_test]
-	fn home_link_manga_resolves_via_get_manga_update() {
-		let s = new_source();
-		let layout = s.get_home().expect("get home should succeed");
-		let mut checked = 0;
-		for comp in &layout.components {
-			let HomeComponentValue::MangaList { entries, .. } = &comp.value else {
-				continue;
-			};
-			let Some(first) = entries.first() else {
-				continue;
-			};
-			let Link {
-				value: Some(LinkValue::Manga(manga)),
-				..
-			} = first
-			else {
-				panic!("section {:?} first link is not a Manga", comp.title);
-			};
-			assert!(!manga.key.is_empty(), "manga key should not be empty");
-			let updated: Manga = s
-				.get_manga_update(manga.clone(), true, true)
-				.expect("get manga update should succeed");
-			assert!(!updated.title.is_empty(), "title should be filled in");
-			assert!(updated.chapters.is_some(), "chapters should be present");
-			let chs = updated.chapters.as_deref().unwrap();
-			assert!(
-				!chs.is_empty(),
-				"chapter list should not be empty (manga={})",
-				updated.key
-			);
-			checked += 1;
-		}
-		assert!(checked >= 3, "checked at least 3 sections, got {checked}");
-	}
-
-	#[aidoku_test]
-	fn get_manga_update_for_known_manga() {
-		let s = new_source();
-		let manga = Manga {
-			key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
-			..Default::default()
-		};
-		let updated = s
-			.get_manga_update(manga, true, false)
-			.expect("get manga update should succeed");
-		assert!(!updated.title.is_empty(), "title should be present");
-		assert!(updated.cover.is_some(), "cover should be present");
-		assert_eq!(updated.viewer, Viewer::Webtoon);
-		assert_eq!(updated.content_rating, ContentRating::NSFW);
-		assert!(updated.description.is_some(), "description should be present");
-		assert_eq!(updated.status, MangaStatus::Ongoing, "should be ongoing");
-	}
-
-	#[aidoku_test]
-	fn get_manga_update_returns_chapter_list() {
-		let s = new_source();
-		let manga = Manga {
-			key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
-			..Default::default()
-		};
-		let updated = s
-			.get_manga_update(manga, false, true)
-			.expect("get manga update should succeed");
-		let chs = updated.chapters.as_deref().expect("chapters");
-		assert!(chs.len() >= 10, "should have many chapters, got {}", chs.len());
-		for c in chs.iter().take(3) {
-			assert!(!c.key.is_empty(), "chapter key should be set");
-			assert!(c.url.is_some(), "chapter url should be set");
-			assert!(c.chapter_number.is_some(), "chapter number should be set");
-		}
-	}
-
-	#[aidoku_test]
-	fn get_page_list_returns_many_pages() {
-		let s = new_source();
-		let manga = Manga {
-			key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
-			..Default::default()
-		};
-		let updated = s
-			.get_manga_update(manga.clone(), false, true)
-			.expect("get manga update");
-		let chs = updated.chapters.as_deref().expect("chapters");
-		let first = chs.iter().find(|c| c.key == "0").expect("chapter 0");
-		let pages: Vec<Page> = s
-			.get_page_list(manga, first.clone())
-			.expect("get page list");
-		assert!(!pages.is_empty(), "pages should be non-empty");
-		assert!(pages.len() >= 50, "should have many pages, got {}", pages.len());
-		for (i, p) in pages.iter().enumerate().take(3) {
-			match &p.content {
-				PageContent::Url(u, _) => assert!(u.contains("r5.rmcdn"), "page {i} url = {u}"),
-				PageContent::Image(_) => {}, // Image was unscrambled successfully
-				_ => panic!("page {i} is not a Url or Image"),
-			}
-		}
-	}
-
-	#[aidoku_test]
-	fn listing_provider_default_listing() {
-		let s = new_source();
-		let listing = Listing {
-			id: String::from("default"),
-			name: String::from("Default"),
-			kind: Default::default(),
-		};
-		let res: MangaPageResult = s.get_manga_list(listing, 1).expect("get manga list");
-		assert!(!res.entries.is_empty(), "page 1 should not be empty");
-		assert!(res.has_next_page, "should have next page");
-		for m in res.entries.iter().take(3) {
-			assert!(!m.key.is_empty());
-			assert!(!m.title.is_empty());
-			assert_eq!(m.viewer, Viewer::Webtoon);
-		}
-	}
-
-	#[aidoku_test]
-	fn search_finds_known_manga() {
-		let s = new_source();
-		let res = s
-			.get_search_manga_list(Some(String::from("深層")), 1, Vec::new())
-			.expect("search should succeed");
-		assert!(!res.entries.is_empty(), "search should return results");
-	}
-
-	#[aidoku_test]
-	fn deep_link_dispatch() {
-		let s = new_source();
-		let r = s
-			.handle_deep_link(String::from(
-				"https://rouman5.com/books/cm4sx1zpa000avnl0ziqnbfy5",
-			))
-			.expect("deep link");
-		match r {
-			Some(DeepLinkResult::Manga { key }) => {
-				assert_eq!(key.as_str(), "cm4sx1zpa000avnl0ziqnbfy5")
-			}
-			other => panic!("expected Manga, got {other:?}"),
-		}
-		let r = s
-			.handle_deep_link(String::from(
-				"https://rouman5.com/books/cm4sx1zpa000avnl0ziqnbfy5/0",
-			))
-			.expect("deep link");
-		match r {
-			Some(DeepLinkResult::Chapter { manga_key, key }) => {
-				assert_eq!(manga_key.as_str(), "cm4sx1zpa000avnl0ziqnbfy5");
-				assert_eq!(key.as_str(), "0");
-			}
-			other => panic!("expected Chapter, got {other:?}"),
-		}
-		let r = s
-			.handle_deep_link(String::from("https://example.com/foo"))
-			.expect("deep link");
-		assert!(r.is_none(), "unknown URL should return None, got {r:?}");
-	}
-
-
-
-
-}
-
+mod test;
 
 register_source!(Roumanwu, ListingProvider, Home, DeepLinkHandler, DynamicSettings, BaseUrlProvider);
-
