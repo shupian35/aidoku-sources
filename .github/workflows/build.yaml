@@ -64,11 +64,11 @@ jobs:
             source_id=$(grep -o '"id": *"[^"]*"' "$src_dir/res/source.json" | head -1 | cut -d'"' -f4)
             source_version=$(grep -o '"version": *[0-9]*' "$src_dir/res/source.json" | head -1 | grep -o '[0-9]*')
             cp "$src_dir/package.aix" "public/sources/${source_id}-v${source_version}.aix"
-            # Try icon.png first, then Icon.png
+            # Try icon.png first, then icon.png
             if [ -f "$src_dir/res/icon.png" ]; then
               cp "$src_dir/res/icon.png" "public/icons/${source_id}-v${source_version}.png"
-            elif [ -f "$src_dir/res/Icon.png" ]; then
-              cp "$src_dir/res/Icon.png" "public/icons/${source_id}-v${source_version}.png"
+            elif [ -f "$src_dir/res/icon.png" ]; then
+              cp "$src_dir/res/icon.png" "public/icons/${source_id}-v${source_version}.png"
             fi
           fi
         done

@@ -71,7 +71,7 @@ aidoku package
 
 ```bash
 # 从多个 .aix 包构建源列表
-aidoku build -o public -n "Source List" src/rust/zh.rouman5/package.aix
+aidoku build -o public -n "Aidoku Sources" src/rust/zh.rouman5/package.aix
 
 # 或使用脚本构建所有源
 ./build.ps1    # Windows
