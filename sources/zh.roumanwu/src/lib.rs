@@ -81,7 +81,7 @@ fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
 	if html.contains(&needle) {
 		return true;
 	}
-	html.contains("下一�?) || html.contains("Next")
+	html.contains("下一頁") || html.contains("Next")
 }
 
 // ---------- Home parsing ----------
@@ -95,10 +95,10 @@ fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
 type SectionSpec = (&'static [&'static str], &'static [&'static str], bool);
 const HOME_SECTIONS: &[SectionSpec] = &[
 	(&["正熱門"],     &["當下超高人氣作品"], true),  // Trending
-	(&["今日最�?], &["今日爆款"],         true),  // Today best
-	(&["最近更�?], &["每日多次更新"], true), // Recently updated
-	(&["本週熱門"], &["本週最熱漫�?], true),  // Weekly trending
-	(&["已完�?], &["完結精選"], true), // Completed (simp/trad)
+	(&["今日最佳"], &["今日爆款"],         true),  // Today best
+	(&["最近更新"], &["每日多次更新"], true), // Recently updated
+	(&["本週熱門"], &["本週最熱漫畫"], true),  // Weekly trending
+	(&["已完結"], &["完結精選"], true), // Completed (simp/trad)
 ];
 
 
@@ -465,7 +465,7 @@ fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 			}
 		}
 		// Use the first subtitle variant that the page shows (just use the first
-		// one in our list for now �?the page usually only shows one).
+		// one in our list for now — the page usually only shows one).
 		let subtitle = subtitles.first().map(|s| String::from(*s));
 		components.push(HomeComponent {
 			title: Some(String::from(used_title)),
@@ -498,7 +498,7 @@ fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageRe
 			Some(h) => h,
 			None => continue,
 		};
-		// /books/{id} has 2 slashes; /books/{id}/{N} has 3 �?keep only manga entries
+		// /books/{id} has 2 slashes; /books/{id}/{N} has 3 — keep only manga entries
 		if href.matches('/').count() != 2 {
 			continue;
 		}
@@ -509,7 +509,7 @@ fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageRe
 		if seen.contains(&key) {
 			continue;
 		}
-		// title �?the card has either a mobile variant or a desktop variant
+		// title — the card has either a mobile variant or a desktop variant
 		let title_el = a
 			.select_first("div.truncate.text-foreground, div.line-clamp-2")
 			.or_else(|| a.select_first("div[class*=\"text-foreground\"]"));
@@ -608,7 +608,7 @@ fn json_string(haystack: &str, key: &str) -> Option<String> {
 	Some(out)
 }
 
-// "第N�?..." -> (N, "...") where �?= U+7B2C, �?= U+8A71
+// "第N話 ..." -> (N, "...") where 第 = U+7B2C, 話 = U+8A71
 fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
 	let bytes = s.as_bytes();
 	let mut i = 0;
@@ -649,7 +649,7 @@ fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
 	let mut title: String = s[title_start..].chars().take(200).collect();
 	if title_trimmed {
 		while let Some(first) = title.chars().next() {
-			if matches!(first, ' ' | '-' | ':' | '�? | '~' | '_') {
+			if matches!(first, ' ' | '-' | ':' | '：' | '~' | '_') {
 				title = title[first.len_utf8()..].to_string();
 			} else {
 				break;
@@ -695,10 +695,10 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 		}
 	}
 
-	// status: scan the rendered body for "狀�?" then read the next <span class="text-foreground">
+	// status: scan the rendered body for "狀態:" then read the next <span class="text-foreground">
 	let mut status = MangaStatus::Unknown;
-	if let Some(idx) = html.find("狀�?") {
-		// Scan a bounded window for the first <span class="text-foreground">�?/span>
+	if let Some(idx) = html.find("狀態:") {
+		// Scan a bounded window for the first <span class="text-foreground">…</span>
 		// without ever doing byte-offset slicing (CJK text breaks the char boundary
 		// if we slice into a multi-byte codepoint).
 		let window = &html[idx..html.len().min(idx + 1200)];
@@ -713,7 +713,7 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 			if let Some(close_rel) = after.find("</span>") {
 				let val = &after[..close_rel];
 				let val = val.trim();
-				if val.contains("連載�?) {
+				if val.contains("連載中") {
 					status = MangaStatus::Ongoing;
 				} else if val.contains("完結") {
 					status = MangaStatus::Completed;
@@ -724,7 +724,7 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 		}
 	}
 
-	// chapter list �?anchors with href="/books/{key}/{N}"
+	// chapter list — anchors with href="/books/{key}/{N}"
 	let mut chapters: Vec<Chapter> = Vec::new();
 	let needle = format!("href=\"/books/{}/", key);
 	let mut search_from = 0;
@@ -848,7 +848,7 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 	}
 
 	// Determine the page count. Prefer JSON-LD, then the rendered counter
-	// `1<!-- -->/<!-- -->N<!-- -->頁`, then the RSC fragment `"/",N,"�?`.
+	// `1<!-- -->/<!-- -->N<!-- -->頁`, then the RSC fragment `"/",N,"頁"`.
 	let mut page_count: i32 = {
 		let json_ld_raw = slice_between(html, "<script type=\"application/ld+json\">", "</script>")
 			.unwrap_or("")
@@ -881,7 +881,7 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 			// page number already consumed by the React render. Strip any leading digits
 			// (the "current page"), then verify a `<!-- -->頁` follows.
 			let after_digits: String = head.chars().skip_while(|c| c.is_ascii_digit()).collect();
-			if let Some(d_end) = after_digits.find("<!-- -->�?) {
+			if let Some(d_end) = after_digits.find("<!-- -->頁") {
 				let digits: String = after_digits[..d_end].chars().take_while(|c| c.is_ascii_digit()).collect();
 				if let Ok(n) = digits.parse::<i32>() {
 					page_count = n;
@@ -892,7 +892,7 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 		}
 	}
 	if page_count == 0 {
-		// The RSC counter is `"<a>","/","<b>","�?` (4 quoted strings). We require
+		// The RSC counter is `"<a>","/","<b>","頁"` (4 quoted strings). We require
 		// the `頁` to follow within a few tokens to avoid matching unrelated `/,`.
 		let mut i = 0;
 		while let Some(rel) = payload[i..].find("\"/\",") {
@@ -1022,7 +1022,7 @@ impl Source for Roumanwu {
 		let (page_count, mut urls) = parse_chapter_pages(&html)?;
 
 		// The RSC payload also contains imageUrl entries for related-manga cards
-		// and recommendation thumbnails �?those have ind >= page_count for a normal
+		// and recommendation thumbnails — those have ind >= page_count for a normal
 		// chapter, so trim by index.
 		if page_count > 0 && urls.len() > page_count as usize {
 			urls.truncate(page_count as usize);
