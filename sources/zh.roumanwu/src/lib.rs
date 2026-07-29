@@ -92,13 +92,20 @@ fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
 // Each entry: (title variants, subtitle variants, ranking). We accept both
 // traditional (結結) and simplified (結稿) spellings because the site
 // serves different content based on Accept-Language / cache / geo routing.
-type SectionSpec = (&'static [&'static str], &'static [&'static str], bool);
+#[derive(Clone, Copy)]
+enum HomeSectionKind {
+	BigScroller,
+	Scroller,
+	MangaList { ranking: bool, page_size: i32 },
+}
+
+type SectionSpec = (&'static [&'static str], &'static [&'static str], HomeSectionKind);
 const HOME_SECTIONS: &[SectionSpec] = &[
-	(&["正熱門"],     &["當下超高人氣作品"], true),  // Trending
-	(&["今日最佳"], &["今日爆款"],         true),  // Today best
-	(&["最近更新"], &["每日多次更新"], true), // Recently updated
-	(&["本週熱門"], &["本週最熱漫畫"], true),  // Weekly trending
-	(&["已完結"], &["完結精選"], true), // Completed (simp/trad)
+	(&["正熱門"],     &["當下超高人氣作品"], HomeSectionKind::BigScroller),  // Trending
+	(&["今日最佳"], &["今日爆款"],         HomeSectionKind::MangaList { ranking: true, page_size: 3 }),  // Today best
+	(&["最近更新"], &["每日多次更新"], HomeSectionKind::MangaList { ranking: true, page_size: 3 }),  // Recently updated
+	(&["本週熱門"], &["本週最熱漫畫"], HomeSectionKind::MangaList { ranking: true, page_size: 3 }),  // Weekly trending
+	(&["已完結"], &["完結精選"], HomeSectionKind::Scroller),  // Completed
 ];
 
 
@@ -368,7 +375,7 @@ fn unscramble_image(url: &str, image_data: &[u8]) -> Option<ImageRef> {
 
 fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 	let mut components: Vec<HomeComponent> = Vec::new();
-	for (titles, subtitles, ranking) in HOME_SECTIONS {
+	for (titles, subtitles, kind) in HOME_SECTIONS {
 		// Find the first title variant present in the HTML
 		let mut found: Option<(usize, &str)> = None;
 		for title in titles.iter() {
@@ -404,6 +411,7 @@ fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 			.unwrap_or(html.len());
 		let range = &html[t_idx..end_idx];
 		let mut links: Vec<Link> = Vec::new();
+		let mut mangas: Vec<Manga> = Vec::new();
 		let mut seen: Vec<String> = Vec::new();
 		let mut search = 0;
 		let anchor = "<a href=\"/books/";
@@ -453,6 +461,7 @@ fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 					content_rating: ContentRating::NSFW,
 					..Default::default()
 				};
+				mangas.push(manga.clone());
 				links.push(Link {
 					title: card_title,
 					subtitle: None,
@@ -467,15 +476,26 @@ fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 		// Use the first subtitle variant that the page shows (just use the first
 		// one in our list for now — the page usually only shows one).
 		let subtitle = subtitles.first().map(|s| String::from(*s));
-		components.push(HomeComponent {
-			title: Some(String::from(used_title)),
-			subtitle,
-			value: HomeComponentValue::MangaList {
-				ranking: *ranking,
-				page_size: Some(12),
+		let value = match *kind {
+			HomeSectionKind::BigScroller => HomeComponentValue::BigScroller {
+				entries: mangas,
+				auto_scroll_interval: None,
+			},
+			HomeSectionKind::Scroller => HomeComponentValue::Scroller {
 				entries: links,
 				listing: None,
 			},
+			HomeSectionKind::MangaList { ranking, page_size } => HomeComponentValue::MangaList {
+				ranking,
+				page_size: Some(page_size),
+				entries: links,
+				listing: None,
+			},
+		};
+		components.push(HomeComponent {
+			title: Some(String::from(used_title)),
+			subtitle,
+			value,
 		});
 	}
 	Ok(HomeLayout { components })
