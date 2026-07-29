@@ -18,17 +18,21 @@
 
 ### 前置要求
 
-- Rust (nightly toolchain)
+- Rust toolchain
 - [aidoku-cli](https://github.com/Aidoku/aidoku-cli)
 
-### 安装 aidoku-cli
+### aidoku-cli 命令
 
-```bash
-# Windows (使用 scoop)
-scoop install aidoku-cli
+```
+Usage: aidoku <COMMAND>
 
-# 或从 GitHub Releases 下载
-# https://github.com/Aidoku/aidoku-cli/releases
+Commands:
+  package  Build and package a source
+  build    Build a source list
+  serve    Serve a source on the local network
+  verify   Verify a source is ready to be published
+  init     Initialize a new source
+  help     Print this message or the help of a given subcommand
 ```
 
 ### 项目结构
@@ -48,8 +52,7 @@ aidoku-sources/
 │   ├── sources/              # .aix 包
 │   └── icons/                # 源图标
 ├── build.ps1                 # Windows 构建脚本
-├── build.sh                  # Linux/Mac 构建脚本
-└── .github/workflows/        # CI/CD
+└── build.sh                  # Linux/Mac 构建脚本
 ```
 
 ### 构建单个源
@@ -58,23 +61,21 @@ aidoku-sources/
 # 进入源目录
 cd src/rust/zh.rouman5
 
-# 使用 aidoku-cli 构建并打包
+# 构建并打包
 aidoku package
 
-# 生成的 package.aix 在当前目录
+# 生成 package.aix
 ```
 
-### 构建所有源
+### 构建源列表
 
 ```bash
-# Windows
-./build.ps1
-
-# Linux/Mac
-./build.sh
-
-# 或手动构建
+# 从多个 .aix 包构建源列表
 aidoku build -o public -n "Source List" src/rust/zh.rouman5/package.aix
+
+# 或使用脚本构建所有源
+./build.ps1    # Windows
+./build.sh     # Linux/Mac
 ```
 
 ### 启动本地服务器
@@ -83,7 +84,7 @@ aidoku build -o public -n "Source List" src/rust/zh.rouman5/package.aix
 # 从 public 目录启动
 aidoku serve
 
-# 或从单个源启动
+# 或从单个包启动
 aidoku serve src/rust/zh.rouman5/package.aix
 ```
 
