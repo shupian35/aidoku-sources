@@ -5,8 +5,8 @@
       "id": "zh.rouman5",
       "name": "肉漫屋",
       "version": 1,
-      "iconURL": "zh.rouman5-v1.png",
-      "downloadURL": "zh.rouman5-v1.aix",
+      "iconURL": "icons/zh.rouman5-v1.png",
+      "downloadURL": "sources/zh.rouman5-v1.aix",
       "languages": [
         "zh"
       ],

@@ -3,8 +3,8 @@
 // aidoku is a no_std library. We bring alloc items and the prelude macros into scope.
 use aidoku::{
 	alloc::{format, string::ToString, vec, String, Vec},
-	imports::{html::Html, net::Request},
-	AidokuError, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult, FilterValue, Home,
+	imports::{defaults::defaults_get, html::Html, net::Request},
+	AidokuError, BaseUrlProvider, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult, DynamicSettings, FilterValue, Home,
 	HomeComponent, HomeComponentValue, HomeLayout, Link, LinkValue, Listing, ListingProvider,
 	Manga, MangaPageResult, MangaStatus, Page, PageContent, Result, Source, Viewer,
 };
@@ -13,6 +13,10 @@ use aidoku::imports::canvas::{Canvas, ImageRef, Rect};
 
 
 const BASE_URL: &str = "https://rouman5.com";
+
+fn get_base_url() -> String {
+    defaults_get::<String>("base_url").unwrap_or_else(|| String::from(BASE_URL))
+}
 const USER_AGENT: &str =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -441,7 +445,7 @@ fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 					key,
 					title: card_title.clone(),
 					cover: cover.clone(),
-					url: Some(format!("{}{}", BASE_URL, href)),
+					url: Some(format!("{}{}", get_base_url(), href)),
 					viewer: Viewer::Webtoon,
 					content_rating: ContentRating::NSFW,
 					..Default::default()
@@ -523,7 +527,7 @@ fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageRe
 			key,
 			title,
 			cover,
-			url: Some(format!("{}{}", BASE_URL, href)),
+			url: Some(format!("{}{}", get_base_url(), href)),
 			viewer: Viewer::Webtoon,
 			content_rating: ContentRating::NSFW,
 			..Default::default()
@@ -779,7 +783,7 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 	}
 	chapters.reverse(); // site lists oldest first; Aidoku expects newest first
 
-	let url = Some(format!("{}/books/{}", BASE_URL, key));
+	let url = Some(format!("{}/books/{}", get_base_url(), key));
 	Ok(Manga {
 		key: key.to_string(),
 		title,
@@ -981,9 +985,9 @@ impl Source for Rouman5 {
 		let sp = site_page(page);
 		let url = match query.as_deref() {
 			Some(q) if !q.trim().is_empty() => {
-				format!("{}/search?term={}&page={}", BASE_URL, urlencode(q), sp)
+				format!("{}/search?term={}&page={}", get_base_url(), urlencode(q), sp)
 			}
-			_ => format!("{}/books?page={}", BASE_URL, sp),
+			_ => format!("{}/books?page={}", get_base_url(), sp),
 		};
 		let html = html_get_string(&url)?;
 		parse_manga_listing(&html, sp)
@@ -999,7 +1003,7 @@ impl Source for Rouman5 {
 		if key.is_empty() {
 			return Err(AidokuError::message("missing manga key"));
 		}
-		let url = format!("{}/books/{}", BASE_URL, key);
+		let url = format!("{}/books/{}", get_base_url(), key);
 		let html = html_get_string(&url)?;
 		parse_manga_detail(&html, &key)
 	}
@@ -1010,7 +1014,7 @@ impl Source for Rouman5 {
 			.url
 			.clone()
 			.unwrap_or_else(|| format!("/books/{}/{}", manga.key, chapter.key));
-		let full = format!("{}{}", BASE_URL, path);
+		let full = format!("{}{}", get_base_url(), path);
 		let html = html_get_string(&full)?;
 		let (page_count, mut urls) = parse_chapter_pages(&html)?;
 
@@ -1064,10 +1068,10 @@ impl ListingProvider for Rouman5 {
 		let filter = match listing.id.as_str() {
 			"ongoing" => "true",
 			"completed" => "false",
-			"all" => "",
-			&_ => todo!(),
+			"all" | "default" => "",
+			_ => "",
 		};
-		let url = format!("{}/books?continued={}&page={}", BASE_URL, filter, sp);
+		let url = format!("{}/books?continued={}&page={}", get_base_url(), filter, sp);
 		let html = html_get_string(&url)?;
 		parse_manga_listing(&html, sp)
 	}
@@ -1075,7 +1079,7 @@ impl ListingProvider for Rouman5 {
 
 impl Home for Rouman5 {
 	fn get_home(&self) -> Result<HomeLayout> {
-		let html = html_get_string(&format!("{}/home", BASE_URL))?;
+		let html = html_get_string(&format!("{}/home", get_base_url()))?;
 		parse_home_layout(&html)
 	}
 }
@@ -1110,6 +1114,30 @@ impl DeepLinkHandler for Rouman5 {
 		}
 		Ok(Some(DeepLinkResult::Manga { key: seg.into() }))
 	}
+}
+
+
+
+impl DynamicSettings for Rouman5 {
+    fn get_dynamic_settings(&self) -> Result<Vec<aidoku::Setting>> {
+        let current_url = get_base_url();
+        Ok(vec![
+            aidoku::TextSetting {
+                key: "base_url".into(),
+                title: "源地址".into(),
+                placeholder: Some(BASE_URL.into()),
+                default: Some(current_url.into()),
+                ..Default::default()
+            }
+            .into(),
+        ])
+    }
+}
+
+impl BaseUrlProvider for Rouman5 {
+    fn get_base_url(&self) -> Result<String> {
+        Ok(get_base_url())
+    }
 }
 
 // ---------- Tests ----------
@@ -1327,5 +1355,5 @@ fn debug_home_response() {
 }
 
 
-register_source!(Rouman5, ListingProvider, Home, DeepLinkHandler);
+register_source!(Rouman5, ListingProvider, Home, DeepLinkHandler, DynamicSettings, BaseUrlProvider);
 
