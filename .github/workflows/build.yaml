@@ -87,8 +87,8 @@ jobs:
               id: source.info.id,
               name: source.info.name,
               version: source.info.version,
-              iconURL: source.info.id + '-v' + source.info.version + '.png',
-              downloadURL: source.info.id + '-v' + source.info.version + '.aix',
+              iconURL: 'icons/' + source.info.id + '-v' + source.info.version + '.png',
+              downloadURL: 'sources/' + source.info.id + '-v' + source.info.version + '.aix',
               languages: (source.info.languages || []).map(l => l.code || l),
               contentRating: source.info.contentRating || source.info.nsfw || 0,
               baseURL: source.info.url
