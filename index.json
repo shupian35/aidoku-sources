@@ -2,11 +2,11 @@
   "name": "Aidoku Sources",
   "sources": [
     {
-      "id": "zh.rouman5",
+      "id": "zh.roumanwu",
       "name": "肉漫屋",
       "version": 1,
-      "iconURL": "icons/zh.rouman5-v1.png",
-      "downloadURL": "sources/zh.rouman5-v1.aix",
+      "iconURL": "icons/zh.roumanwu-v1.png",
+      "downloadURL": "sources/zh.roumanwu-v1.aix",
       "languages": [
         "zh"
       ],
