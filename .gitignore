@@ -1,5 +1,9 @@
-/target
-*.aix
-/index.min.json
-/node_modules
-src/rust/*/target/
+﻿
+# Rust
+target/
+**/*.rs.bk
+
+# Aidoku
+public/
+package.aix
+
