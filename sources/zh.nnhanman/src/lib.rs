@@ -499,7 +499,7 @@ impl Home for Nnhm7 {
 					subtitle: None,
 					value: HomeComponentValue::MangaList {
 						ranking: false,
-						page_size: Some(12),
+						page_size: Some(3),
 						entries: links,
 						listing: None,
 					},
