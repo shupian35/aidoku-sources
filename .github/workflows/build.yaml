@@ -4,7 +4,7 @@ on:
     branches:
     - master
     paths:
-    - 'src/**'
+    - 'sources/**'
     - '.github/workflows/build.yaml'
 
 permissions:
@@ -27,7 +27,7 @@ jobs:
           ~/.cargo/registry/index
           ~/.cargo/registry/cache
           ~/.cargo/git/db
-          src/rust/**/target/
+          sources/**/target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-
@@ -40,7 +40,7 @@ jobs:
     
     - name: Build all sources
       run: |
-        for src_dir in src/rust/*/; do
+        for src_dir in sources/*/; do
           if [ -f "$src_dir/Cargo.toml" ]; then
             echo "Building $(basename $src_dir)..."
             cd "$src_dir"
@@ -59,7 +59,7 @@ jobs:
         mkdir -p public/sources public/icons
         
         # Copy packages and icons
-        for src_dir in src/rust/*/; do
+        for src_dir in sources/*/; do
           if [ -f "$src_dir/package.aix" ]; then
             source_id=$(grep -o '"id": *"[^"]*"' "$src_dir/res/source.json" | head -1 | cut -d'"' -f4)
             source_version=$(grep -o '"version": *[0-9]*' "$src_dir/res/source.json" | head -1 | grep -o '[0-9]*')
@@ -76,9 +76,9 @@ jobs:
         const fs = require('fs');
         const path = require('path');
         const sources = [];
-        const srcDirs = fs.readdirSync('src/rust');
+        const srcDirs = fs.readdirSync('sources');
         for (const dir of srcDirs) {
-          const sourceJsonPath = path.join('src/rust', dir, 'res', 'source.json');
+          const sourceJsonPath = path.join('sources', dir, 'res', 'source.json');
           if (fs.existsSync(sourceJsonPath)) {
             const source = JSON.parse(fs.readFileSync(sourceJsonPath, 'utf8'));
             sources.push({

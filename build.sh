@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # Build all Aidoku sources using aidoku-cli
 set -e
 
@@ -8,7 +8,7 @@ PACKAGES=()
 echo "=== Building Aidoku Sources ==="
 
 # Build each source
-for src_dir in "$SCRIPT_DIR"/src/rust/*/; do
+for src_dir in "$SCRIPT_DIR"/sources/*/; do
     if [ -f "$src_dir/Cargo.toml" ]; then
         src_name=$(basename "$src_dir")
         echo ""

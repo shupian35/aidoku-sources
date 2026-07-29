@@ -12,7 +12,7 @@ Write-Host "=== Building Aidoku Sources ===" -ForegroundColor Cyan
 $packages = @()
 
 # Build each source
-$srcDirs = Get-ChildItem -Path (Join-Path $ScriptDir "src\rust") -Directory -Filter $SourceName
+$srcDirs = Get-ChildItem -Path (Join-Path $ScriptDir "sources") -Directory -Filter $SourceName
 
 foreach ($srcDir in $srcDirs) {
     $cargoToml = Join-Path $srcDir.FullName "Cargo.toml"
