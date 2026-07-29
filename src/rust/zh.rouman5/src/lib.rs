@@ -15,7 +15,10 @@ use aidoku::imports::canvas::{Canvas, ImageRef, Rect};
 const BASE_URL: &str = "https://rouman5.com";
 
 fn get_base_url() -> String {
-    defaults_get::<String>("base_url").unwrap_or_else(|| String::from(BASE_URL))
+    match defaults_get::<String>("base_url") {
+        Some(url) if !url.trim().is_empty() => url,
+        _ => String::from(BASE_URL),
+    }
 }
 const USER_AGENT: &str =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
