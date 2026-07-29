@@ -1130,6 +1130,14 @@ impl DynamicSettings for Rouman5 {
                 ..Default::default()
             }
             .into(),
+            aidoku::LinkSetting {
+                key: "address_link".into(),
+                title: "地址发布：https://rdz3.xyz/dizhi".into(),
+                url: "https://rdz3.xyz/dizhi".into(),
+                external: Some(true),
+                ..Default::default()
+            }
+            .into(),
         ])
     }
 }
