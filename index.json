@@ -2,6 +2,18 @@
   "name": "Aidoku Sources",
   "sources": [
     {
+      "id": "zh.nnhanman",
+      "name": "鸟鸟韩漫",
+      "version": 4,
+      "iconURL": "icons/zh.nnhanman-v4.png",
+      "downloadURL": "sources/zh.nnhanman-v4.aix",
+      "languages": [
+        "zh"
+      ],
+      "contentRating": 2,
+      "baseURL": "https://nnhm7.com"
+    },
+    {
       "id": "zh.roumanwu",
       "name": "肉漫屋",
       "version": 1,
