@@ -16,6 +16,21 @@
 
 ## 开发
 
+### 前置要求
+
+- Rust (nightly toolchain)
+- [aidoku-cli](https://github.com/Aidoku/aidoku-cli)
+
+### 安装 aidoku-cli
+
+```bash
+# Windows (使用 scoop)
+scoop install aidoku-cli
+
+# 或从 GitHub Releases 下载
+# https://github.com/Aidoku/aidoku-cli/releases
+```
+
 ### 项目结构
 
 ```
@@ -23,16 +38,53 @@ aidoku-sources/
 ├── src/rust/
 │   └── zh.rouman5/          # 单个源
 │       ├── .cargo/
-│       ├── res/              # 资源文件 (source.json, Icon.png)
+│       ├── res/              # 资源文件 (source.json, icon.png)
 │       ├── src/              # Rust 源码
 │       ├── Cargo.toml
 │       └── build.sh
 ├── public/                   # 生成的发布目录
 │   ├── index.json
+│   ├── index.min.json
 │   ├── sources/              # .aix 包
 │   └── icons/                # 源图标
 ├── build.ps1                 # Windows 构建脚本
+├── build.sh                  # Linux/Mac 构建脚本
 └── .github/workflows/        # CI/CD
+```
+
+### 构建单个源
+
+```bash
+# 进入源目录
+cd src/rust/zh.rouman5
+
+# 使用 aidoku-cli 构建并打包
+aidoku package
+
+# 生成的 package.aix 在当前目录
+```
+
+### 构建所有源
+
+```bash
+# Windows
+./build.ps1
+
+# Linux/Mac
+./build.sh
+
+# 或手动构建
+aidoku build -o public -n "Source List" src/rust/zh.rouman5/package.aix
+```
+
+### 启动本地服务器
+
+```bash
+# 从 public 目录启动
+aidoku serve
+
+# 或从单个源启动
+aidoku serve src/rust/zh.rouman5/package.aix
 ```
 
 ### 添加新源
@@ -40,20 +92,7 @@ aidoku-sources/
 1. 在 `src/rust/` 下创建新目录，例如 `src/rust/zh.example/`
 2. 复制 `zh.rouman5` 的结构作为模板
 3. 修改 `res/source.json` 和 `src/lib.rs`
-4. 运行 `./build.ps1` 构建所有源
-
-### 构建
-
-```bash
-# 构建所有源
-./build.ps1
-
-# 构建单个源
-./build.ps1 -SourceName "zh.rouman5"
-
-# 启动本地服务器
-aidoku serve src/rust/zh.rouman5/package.aix
-```
+4. 运行 `./build.ps1` 或 `./build.sh` 构建所有源
 
 ## License
 
