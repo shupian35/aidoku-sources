@@ -9,23 +9,23 @@ This repository contains Aidoku source extensions for manga websites. The projec
 ```
 aidoku-sources/
 ├── sources/                    # Source implementations
-�?  └── zh.rouman5/             # rouman5.com source
-�?      ├── .cargo/             # Cargo configuration
-�?      ├── res/                # Source resources (source.json, Icon.png)
-�?      ├── src/                # Rust source code
-�?      �?  ├── lib.rs          # Main source implementation
-�?      �?  └── utils.rs        # Utility functions
-�?      ├── Cargo.toml          # Rust project configuration
-�?      ├── Cargo.lock          # Dependency lock file
-�?      ├── build.sh            # Build script for this source
-�?      └── rustfmt.toml        # Rust formatting config
+�?  └── zh.roumanwu/             # rouman5.com source
+�?      ├── .cargo/             # Cargo configuration
+�?      ├── res/                # Source resources (source.json, Icon.png)
+�?      ├── src/                # Rust source code
+�?      �?  ├── lib.rs          # Main source implementation
+�?      �?  └── utils.rs        # Utility functions
+�?      ├── Cargo.toml          # Rust project configuration
+�?      ├── Cargo.lock          # Dependency lock file
+�?      ├── build.sh            # Build script for this source
+�?      └── rustfmt.toml        # Rust formatting config
 ├── public/                      # Generated public directory
-�?  ├── index.json              # Source list (pretty)
-�?  ├── index.min.json          # Source list (minified)
-�?  ├── sources/                # Compiled .aix packages
-�?  └── icons/                  # Source icons
+�?  ├── index.json              # Source list (pretty)
+�?  ├── index.min.json          # Source list (minified)
+�?  ├── sources/                # Compiled .aix packages
+�?  └── icons/                  # Source icons
 ├── .github/workflows/          # GitHub Actions CI/CD
-�?  └── build.yaml              # Build workflow
+�?  └── build.yaml              # Build workflow
 ├── build.ps1                   # Windows build script
 ├── README.md                   # Project documentation
 └── AGENTS.md                   # This file
@@ -36,7 +36,7 @@ aidoku-sources/
 ### Build single source
 ```bash
 # Navigate to source directory
-cd sources/zh.rouman5
+cd sources/zh.roumanwu
 
 # Build the WebAssembly module
 cargo build --release --target wasm32-unknown-unknown
@@ -54,13 +54,13 @@ aidoku package
 ./build.ps1
 
 # Build specific source
-./build.ps1 -SourceName "zh.rouman5"
+./build.ps1 -SourceName "zh.roumanwu"
 ```
 
 ### Start local server
 ```bash
 # Serve a specific source
-aidoku serve sources/zh.rouman5/package.aix
+aidoku serve sources/zh.roumanwu/package.aix
 
 # Serve from public directory
 aidoku serve
@@ -69,7 +69,7 @@ aidoku serve
 ## Adding a New Source
 
 1. Create a new directory under `sources/` with the source ID (e.g., `sources/zh.example/`)
-2. Copy the structure from an existing source (e.g., `zh.rouman5`)
+2. Copy the structure from an existing source (e.g., `zh.roumanwu`)
 3. Update `res/source.json` with the new source metadata
 4. Implement the source in `src/lib.rs`
 5. Add the source icon as `res/Icon.png`

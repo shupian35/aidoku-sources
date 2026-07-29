@@ -1,4 +1,4 @@
-ï»¿ #![no_std]
+ #![no_std]
 
 // aidoku is a no_std library. We bring alloc items and the prelude macros into scope.
 use aidoku::{
@@ -81,7 +81,7 @@ fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
 	if html.contains(&needle) {
 		return true;
 	}
-	html.contains("ä¸‹ä¸€é ") || html.contains("Next")
+	html.contains("ÏÂÒ»í“") || html.contains("Next")
 }
 
 // ---------- Home parsing ----------
@@ -90,15 +90,15 @@ fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
 // (title, subtitle, ranking) where ranking controls whether the list is
 // rendered with 1./2./3. numbers in the Aidoku UI.
 // Each entry: (title variants, subtitle variants, ranking). We accept both
-// traditional (çµçµ) and simplified (çµç¨¿) spellings because the site
+// traditional (½Y½Y) and simplified (½Y¸å) spellings because the site
 // serves different content based on Accept-Language / cache / geo routing.
 type SectionSpec = (&'static [&'static str], &'static [&'static str], bool);
 const HOME_SECTIONS: &[SectionSpec] = &[
-	(&["æ­£ç†±é–€"],     &["ç•¶ä¸‹è¶…é«˜äººæ°£ä½œå“"], true),  // Trending
-	(&["ä»Šæ—¥æœ€ä½³"], &["ä»Šæ—¥çˆ†æ¬¾"],         true),  // Today best
-	(&["æœ€è¿‘æ›´æ–°"], &["æ¯æ—¥å¤šæ¬¡æ›´æ–°"], true), // Recently updated
-	(&["æœ¬é€±ç†±é–€"], &["æœ¬é€±æœ€ç†±æ¼«ç•«"], true),  // Weekly trending
-	(&["å·²å®Œçµ"], &["å®Œçµç²¾é¸"], true), // Completed (simp/trad)
+	(&["ÕıŸáéT"],     &["®”ÏÂ³¬¸ßÈËšâ×÷Æ·"], true),  // Trending
+	(&["½ñÈÕ×î¼Ñ"], &["½ñÈÕ±¬¿î"],         true),  // Today best
+	(&["×î½ü¸üĞÂ"], &["Ã¿ÈÕ¶à´Î¸üĞÂ"], true), // Recently updated
+	(&["±¾ßLŸáéT"], &["±¾ßL×îŸáÂş®‹"], true),  // Weekly trending
+	(&["ÒÑÍê½Y"], &["Íê½Y¾«ßx"], true), // Completed (simp/trad)
 ];
 
 
@@ -465,7 +465,7 @@ fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 			}
 		}
 		// Use the first subtitle variant that the page shows (just use the first
-		// one in our list for now â€” the page usually only shows one).
+		// one in our list for now ¡ª the page usually only shows one).
 		let subtitle = subtitles.first().map(|s| String::from(*s));
 		components.push(HomeComponent {
 			title: Some(String::from(used_title)),
@@ -498,7 +498,7 @@ fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageRe
 			Some(h) => h,
 			None => continue,
 		};
-		// /books/{id} has 2 slashes; /books/{id}/{N} has 3 â€” keep only manga entries
+		// /books/{id} has 2 slashes; /books/{id}/{N} has 3 ¡ª keep only manga entries
 		if href.matches('/').count() != 2 {
 			continue;
 		}
@@ -509,7 +509,7 @@ fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageRe
 		if seen.contains(&key) {
 			continue;
 		}
-		// title â€” the card has either a mobile variant or a desktop variant
+		// title ¡ª the card has either a mobile variant or a desktop variant
 		let title_el = a
 			.select_first("div.truncate.text-foreground, div.line-clamp-2")
 			.or_else(|| a.select_first("div[class*=\"text-foreground\"]"));
@@ -608,7 +608,7 @@ fn json_string(haystack: &str, key: &str) -> Option<String> {
 	Some(out)
 }
 
-// "ç¬¬Nè©± ..." -> (N, "...") where ç¬¬ = U+7B2C, è©± = U+8A71
+// "µÚNÔ’ ..." -> (N, "...") where µÚ = U+7B2C, Ô’ = U+8A71
 fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
 	let bytes = s.as_bytes();
 	let mut i = 0;
@@ -649,7 +649,7 @@ fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
 	let mut title: String = s[title_start..].chars().take(200).collect();
 	if title_trimmed {
 		while let Some(first) = title.chars().next() {
-			if matches!(first, ' ' | '-' | ':' | 'ï¼š' | '~' | '_') {
+			if matches!(first, ' ' | '-' | ':' | '£º' | '~' | '_') {
 				title = title[first.len_utf8()..].to_string();
 			} else {
 				break;
@@ -695,10 +695,10 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 		}
 	}
 
-	// status: scan the rendered body for "ç‹€æ…‹:" then read the next <span class="text-foreground">
+	// status: scan the rendered body for " î‘B:" then read the next <span class="text-foreground">
 	let mut status = MangaStatus::Unknown;
-	if let Some(idx) = html.find("ç‹€æ…‹:") {
-		// Scan a bounded window for the first <span class="text-foreground">â€¦</span>
+	if let Some(idx) = html.find(" î‘B:") {
+		// Scan a bounded window for the first <span class="text-foreground">¡­</span>
 		// without ever doing byte-offset slicing (CJK text breaks the char boundary
 		// if we slice into a multi-byte codepoint).
 		let window = &html[idx..html.len().min(idx + 1200)];
@@ -713,18 +713,18 @@ fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 			if let Some(close_rel) = after.find("</span>") {
 				let val = &after[..close_rel];
 				let val = val.trim();
-				if val.contains("é€£è¼‰ä¸­") {
+				if val.contains("ßBİdÖĞ") {
 					status = MangaStatus::Ongoing;
-				} else if val.contains("å®Œçµ") {
+				} else if val.contains("Íê½Y") {
 					status = MangaStatus::Completed;
-				} else if val.contains("ä¼‘åˆŠ") || val.contains("åœåˆŠ") {
+				} else if val.contains("Ğİ¿¯") || val.contains("Í£¿¯") {
 					status = MangaStatus::Hiatus;
 				}
 			}
 		}
 	}
 
-	// chapter list â€” anchors with href="/books/{key}/{N}"
+	// chapter list ¡ª anchors with href="/books/{key}/{N}"
 	let mut chapters: Vec<Chapter> = Vec::new();
 	let needle = format!("href=\"/books/{}/", key);
 	let mut search_from = 0;
@@ -848,7 +848,7 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 	}
 
 	// Determine the page count. Prefer JSON-LD, then the rendered counter
-	// `1<!-- -->/<!-- -->N<!-- -->é `, then the RSC fragment `"/",N,"é "`.
+	// `1<!-- -->/<!-- -->N<!-- -->í“`, then the RSC fragment `"/",N,"í“"`.
 	let mut page_count: i32 = {
 		let json_ld_raw = slice_between(html, "<script type=\"application/ld+json\">", "</script>")
 			.unwrap_or("")
@@ -869,19 +869,19 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 		v
 	};
 	if page_count == 0 {
-		// Match the React-rendered counter `N<!-- -->/<!-- -->M<!-- -->é ` (M = page count).
+		// Match the React-rendered counter `N<!-- -->/<!-- -->M<!-- -->í“` (M = page count).
 		let mut i = 0;
 		while let Some(rel) = html[i..].find("<!-- -->/<!-- -->") {
 			let abs = i + rel;
 			let after = &html[abs + 18..];
-			// require a `é ` marker within ~40 bytes to ensure this is the page counter,
+			// require a `í“` marker within ~40 bytes to ensure this is the page counter,
 			// not some other `<!-- -->/<!-- -->` React fragment
 			let head: String = after.chars().take(40).collect();
-			// We expect head to look like `N<!-- -->é ` (N = page count) with the current
+			// We expect head to look like `N<!-- -->í“` (N = page count) with the current
 			// page number already consumed by the React render. Strip any leading digits
-			// (the "current page"), then verify a `<!-- -->é ` follows.
+			// (the "current page"), then verify a `<!-- -->í“` follows.
 			let after_digits: String = head.chars().skip_while(|c| c.is_ascii_digit()).collect();
-			if let Some(d_end) = after_digits.find("<!-- -->é ") {
+			if let Some(d_end) = after_digits.find("<!-- -->í“") {
 				let digits: String = after_digits[..d_end].chars().take_while(|c| c.is_ascii_digit()).collect();
 				if let Ok(n) = digits.parse::<i32>() {
 					page_count = n;
@@ -892,14 +892,14 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 		}
 	}
 	if page_count == 0 {
-		// The RSC counter is `"<a>","/","<b>","é "` (4 quoted strings). We require
-		// the `é ` to follow within a few tokens to avoid matching unrelated `/,`.
+		// The RSC counter is `"<a>","/","<b>","í“"` (4 quoted strings). We require
+		// the `í“` to follow within a few tokens to avoid matching unrelated `/,`.
 		let mut i = 0;
 		while let Some(rel) = payload[i..].find("\"/\",") {
 			let abs = i + rel;
 			let after = &payload[abs + 4..];
 			let head: String = after.chars().take(60).collect();
-			if let Some(d_end) = head.find("\",\"é \"") {
+			if let Some(d_end) = head.find("\",\"í“\"") {
 				let digits: String = head[..d_end].chars().take_while(|c| c.is_ascii_digit()).collect();
 				if let Ok(n) = digits.parse::<i32>() {
 					page_count = n;
@@ -972,9 +972,9 @@ fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 
 // ---------- Source impl ----------
 
-pub struct Rouman5;
+pub struct Roumanwu;
 
-impl Source for Rouman5 {
+impl Source for Roumanwu {
 	fn new() -> Self {
 		Self
 	}
@@ -1022,7 +1022,7 @@ impl Source for Rouman5 {
 		let (page_count, mut urls) = parse_chapter_pages(&html)?;
 
 		// The RSC payload also contains imageUrl entries for related-manga cards
-		// and recommendation thumbnails â€” those have ind >= page_count for a normal
+		// and recommendation thumbnails ¡ª those have ind >= page_count for a normal
 		// chapter, so trim by index.
 		if page_count > 0 && urls.len() > page_count as usize {
 			urls.truncate(page_count as usize);
@@ -1065,7 +1065,7 @@ impl Source for Rouman5 {
 	}
 }
 
-impl ListingProvider for Rouman5 {
+impl ListingProvider for Roumanwu {
 	fn get_manga_list(&self, listing: Listing, page: i32) -> Result<MangaPageResult> {
 		let sp = site_page(page);
 		let filter = match listing.id.as_str() {
@@ -1080,14 +1080,14 @@ impl ListingProvider for Rouman5 {
 	}
 }
 
-impl Home for Rouman5 {
+impl Home for Roumanwu {
 	fn get_home(&self) -> Result<HomeLayout> {
 		let html = html_get_string(&format!("{}/home", get_base_url()))?;
 		parse_home_layout(&html)
 	}
 }
 
-impl DeepLinkHandler for Rouman5 {
+impl DeepLinkHandler for Roumanwu {
 	fn handle_deep_link(&self, url: String) -> Result<Option<DeepLinkResult>> {
 		let url = url.trim();
 		let marker = "/books/";
@@ -1121,13 +1121,13 @@ impl DeepLinkHandler for Rouman5 {
 
 
 
-impl DynamicSettings for Rouman5 {
+impl DynamicSettings for Roumanwu {
     fn get_dynamic_settings(&self) -> Result<Vec<aidoku::Setting>> {
         let current_url = get_base_url();
         Ok(vec![
             aidoku::TextSetting {
                 key: "base_url".into(),
-                title: "æºåœ°å€".into(),
+                title: "Ô´µØÖ·".into(),
                 placeholder: Some(BASE_URL.into()),
                 default: Some(current_url.into()),
                 ..Default::default()
@@ -1135,7 +1135,7 @@ impl DynamicSettings for Rouman5 {
             .into(),
             aidoku::LinkSetting {
                 key: "address_link".into(),
-                title: "åœ°å€å‘å¸ƒï¼šhttps://rdz3.xyz/dizhi".into(),
+                title: "µØÖ··¢²¼£ºhttps://rdz3.xyz/dizhi".into(),
                 url: "https://rdz3.xyz/dizhi".into(),
                 external: Some(true),
                 ..Default::default()
@@ -1145,7 +1145,7 @@ impl DynamicSettings for Rouman5 {
     }
 }
 
-impl BaseUrlProvider for Rouman5 {
+impl BaseUrlProvider for Roumanwu {
     fn get_base_url(&self) -> Result<String> {
         Ok(get_base_url())
     }
@@ -1168,10 +1168,10 @@ mod test {
 	};
 	use aidoku_test::aidoku_test;
 
-	use super::Rouman5;
+	use super::Roumanwu;
 
-	fn new_source() -> Rouman5 {
-		<Rouman5 as Source>::new()
+	fn new_source() -> Roumanwu {
+		<Roumanwu as Source>::new()
 	}
 
 #[aidoku_test]
@@ -1323,7 +1323,7 @@ fn debug_home_response() {
 	fn search_finds_known_manga() {
 		let s = new_source();
 		let res = s
-			.get_search_manga_list(Some(String::from("æ·±å±¤")), 1, Vec::new())
+			.get_search_manga_list(Some(String::from("ÉîŒÓ")), 1, Vec::new())
 			.expect("search should succeed");
 		assert!(!res.entries.is_empty(), "search should return results");
 	}
@@ -1366,5 +1366,5 @@ fn debug_home_response() {
 }
 
 
-register_source!(Rouman5, ListingProvider, Home, DeepLinkHandler, DynamicSettings, BaseUrlProvider);
+register_source!(Roumanwu, ListingProvider, Home, DeepLinkHandler, DynamicSettings, BaseUrlProvider);
 

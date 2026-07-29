@@ -1,4 +1,4 @@
-﻿//! Generic utility helpers used by the rouman5 source.
+//! Generic utility helpers used by the roumanwu source.
 //!
 //! These functions are deliberately source-agnostic. Anything that requires
 //! knowledge about rouman5.com specifically (HTTP fetching, page-index

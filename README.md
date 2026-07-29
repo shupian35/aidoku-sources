@@ -40,7 +40,7 @@ Commands:
 ```
 aidoku-sources/
 ├── src/rust/
-│   └── zh.rouman5/          # 单个源
+│   └── zh.roumanwu/          # 单个源
 │       ├── .cargo/
 │       ├── res/              # 资源文件 (source.json, icon.png)
 │       ├── src/              # Rust 源码
@@ -59,7 +59,7 @@ aidoku-sources/
 
 ```bash
 # 进入源目录
-cd src/rust/zh.rouman5
+cd sources/zh.roumanwu
 
 # 构建并打包
 aidoku package
@@ -71,7 +71,7 @@ aidoku package
 
 ```bash
 # 从多个 .aix 包构建源列表
-aidoku build -o public -n "Aidoku Sources" src/rust/zh.rouman5/package.aix
+aidoku build -o public -n "Aidoku Sources" sources/zh.roumanwu/package.aix
 
 # 或使用脚本构建所有源
 ./build.ps1    # Windows
@@ -85,13 +85,13 @@ aidoku build -o public -n "Aidoku Sources" src/rust/zh.rouman5/package.aix
 aidoku serve
 
 # 或从单个包启动
-aidoku serve src/rust/zh.rouman5/package.aix
+aidoku serve sources/zh.roumanwu/package.aix
 ```
 
 ### 添加新源
 
 1. 在 `src/rust/` 下创建新目录，例如 `src/rust/zh.example/`
-2. 复制 `zh.rouman5` 的结构作为模板
+2. 复制 `zh.roumanwu` 的结构作为模板
 3. 修改 `res/source.json` 和 `src/lib.rs`
 4. 运行 `./build.ps1` 或 `./build.sh` 构建所有源
 
