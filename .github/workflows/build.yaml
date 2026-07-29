@@ -1,0 +1,94 @@
+name: Build sources
+on:
+  push:
+    branches:
+    - main
+    paths:
+    - 'src/**'
+    - '.github/workflows/build.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Cache rust stuff
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          src/rust/**/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        target: wasm32-unknown-unknown
+    
+    - name: Build all sources
+      run: |
+        for src_dir in src/rust/*/; do
+          if [ -f "$src_dir/Cargo.toml" ]; then
+            echo "Building $(basename $src_dir)..."
+            cd "$src_dir"
+            bash build.sh
+            cd "$GITHUB_WORKSPACE"
+          fi
+        done
+    
+    - name: Generate index and deploy
+      run: |
+        mkdir -p public/sources public/icons
+        
+        # Copy packages and icons
+        for src_dir in src/rust/*/; do
+          if [ -f "$src_dir/package.aix" ]; then
+            source_id=$(grep -o '"id": *"[^"]*"' "$src_dir/res/source.json" | head -1 | cut -d'"' -f4)
+            source_version=$(grep -o '"version": *[0-9]*' "$src_dir/res/source.json" | head -1 | grep -o '[0-9]*')
+            cp "$src_dir/package.aix" "public/sources/${source_id}-v${source_version}.aix"
+            cp "$src_dir/res/Icon.png" "public/icons/${source_id}-v${source_version}.png"
+          fi
+        done
+        
+        # Generate index.json
+        node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const sources = [];
+        const srcDirs = fs.readdirSync('src/rust');
+        for (const dir of srcDirs) {
+          const sourceJsonPath = path.join('src/rust', dir, 'res', 'source.json');
+          if (fs.existsSync(sourceJsonPath)) {
+            const source = JSON.parse(fs.readFileSync(sourceJsonPath, 'utf8'));
+            sources.push({
+              id: source.info.id,
+              name: source.info.name,
+              version: source.info.version,
+              iconURL: source.info.id + '-v' + source.info.version + '.png',
+              downloadURL: source.info.id + '-v' + source.info.version + '.aix',
+              languages: (source.info.languages || []).map(l => l.code || l),
+              contentRating: source.info.nsfw || 0,
+              baseURL: source.info.url
+            });
+          }
+        }
+        const index = { name: 'Source List', sources };
+        fs.writeFileSync('public/index.json', JSON.stringify(index, null, 2));
+        fs.writeFileSync('public/index.min.json', JSON.stringify(index));
+        "
+    
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./public

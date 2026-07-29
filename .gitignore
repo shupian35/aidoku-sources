@@ -1,3 +1,5 @@
 /target
-/package.aix
+*.aix
 /index.min.json
+/node_modules
+src/rust/*/target/
