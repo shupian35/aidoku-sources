@@ -4,7 +4,7 @@
 
 ## 使用
 
-在 Aidoku 中添加源列表：`[Source List](https://shupian35.github.io/aidoku-sources/index.min.json)`
+在 Aidoku 中添加源列表：[Source List](https://shupian35.github.io/aidoku-sources/index.min.json)
 
 或使用 `aidoku serve` 命令启动本地服务器。
 
