@@ -95,7 +95,7 @@ jobs:
             });
           }
         }
-        const index = { name: 'Source List', sources };
+        const index = { name: 'Aidoku Sources', sources };
         fs.writeFileSync('public/index.json', JSON.stringify(index, null, 2));
         fs.writeFileSync('public/index.min.json', JSON.stringify(index));
         "
