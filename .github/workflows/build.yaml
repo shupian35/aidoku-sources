@@ -67,8 +67,6 @@ jobs:
             # Try icon.png first, then icon.png
             if [ -f "$src_dir/res/icon.png" ]; then
               cp "$src_dir/res/icon.png" "public/icons/${source_id}-v${source_version}.png"
-            elif [ -f "$src_dir/res/icon.png" ]; then
-              cp "$src_dir/res/icon.png" "public/icons/${source_id}-v${source_version}.png"
             fi
           fi
         done
