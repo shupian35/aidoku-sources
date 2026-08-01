@@ -207,7 +207,11 @@ impl Source for Nnhm7 {
 				chapters.push(Chapter {
 					key: chap_key,
 					title: Some(chapter_title),
-					url: Some(href.to_string()),
+					// Make the chapter URL absolute so Aidoku's "open in
+					// browser" button on the chapter detail page can hand it
+					// straight to the OS browser. `href` from the chapter
+					// list is a site-relative path (`/comic/<slug>/chapter-N.html`).
+					url: Some(format!("{}{}", BASE_URL, href)),
 					..Default::default()
 				});
 			}
@@ -216,16 +220,17 @@ impl Source for Nnhm7 {
 		let authors = author.map(|a| vec![a]);
 
 		Ok(Manga {
-			key,
+			key: key.clone(),
 			title,
 			cover,
 			authors,
 			description,
+			url: Some(format!("{}/comic/{}.html", BASE_URL, key)),
 			tags: Some(tags),
 			status,
 			chapters: Some(chapters),
 			content_rating: ContentRating::NSFW,
-			viewer: Viewer::RightToLeft,
+			viewer: Viewer::Webtoon,
 			..Default::default()
 		})
 	}
@@ -451,3 +456,6 @@ impl DeepLinkHandler for Nnhm7 {
 }
 
 register_source!(Nnhm7, DynamicFilters, Home, DeepLinkHandler);
+
+#[cfg(test)]
+mod test;
