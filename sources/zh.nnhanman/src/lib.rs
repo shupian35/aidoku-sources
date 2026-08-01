@@ -219,6 +219,18 @@ impl Source for Nnhm7 {
 
 		let authors = author.map(|a| vec![a]);
 
+		// Default reading mode. Most titles on this site are webtoon; the
+		// exceptions are tagged `出版漫画`, `3D`, or `日漫`, which read
+		// right-to-left and should use the manga viewer instead.
+		let viewer = if tags
+			.iter()
+			.any(|t| matches!(t.as_str(), "\u{51FA}\u{7248}\u{6F2B}\u{753B}" | "3D" | "\u{65E5}\u{6F2B}"))
+		{
+			Viewer::RightToLeft
+		} else {
+			Viewer::Webtoon
+		};
+
 		Ok(Manga {
 			key: key.clone(),
 			title,
@@ -230,7 +242,7 @@ impl Source for Nnhm7 {
 			status,
 			chapters: Some(chapters),
 			content_rating: ContentRating::NSFW,
-			viewer: Viewer::Webtoon,
+			viewer,
 			..Default::default()
 		})
 	}
