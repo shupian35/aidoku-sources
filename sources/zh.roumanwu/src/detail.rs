@@ -176,7 +176,7 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
             volume_number: None,
             date_uploaded: None,
             scanlators: None,
-            url: Some(format!("/books/{}/{}", key, index)),
+            url: Some(format!("{}/books/{}/{}", get_base_url(), key, index)),
             language: Some("zh".to_string()),
             thumbnail: None,
             locked: false,
