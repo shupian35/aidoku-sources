@@ -154,6 +154,17 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
         let raw_title = raw_title.trim();
         let (chapter_number, clean_title) = extract_chapter_number_and_title(raw_title);
 
+        // Skip anchors that aren't real chapter list entries. The detail page
+        // also links to `/books/<key>/0` for the "開始閱讀" (start reading)
+        // CTA; its inner div contains "開始閱讀" with no 第N話 prefix, so
+        // `extract_chapter_number_and_title` leaves `chapter_number` at 0.0.
+        // Without this filter the CTA surfaces as a phantom "chapter 0" at
+        // the top of the chapter list.
+        if chapter_number == 0.0 {
+            search_from = a_close + 4;
+            continue;
+        }
+
         chapters.push(Chapter {
             key: index.to_string(),
             title: if clean_title.is_empty() {
