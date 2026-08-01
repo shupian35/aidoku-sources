@@ -1,5 +1,5 @@
 use aidoku::alloc::String;
-use aidoku::{Manga, Source};
+use aidoku::{Manga, PageContent, Source};
 use aidoku_test::aidoku_test;
 
 use super::Nnhm7;
@@ -101,6 +101,47 @@ fn viewer_is_right_to_left_for_3d_manga() {
         aidoku::Viewer::RightToLeft,
         "viewer should be RightToLeft for 3D manga"
     );
+}
+
+#[aidoku_test]
+fn page_list_returns_nnpic_image_urls() {
+    // get_page_list must surface every chapter page as a URL pointing at
+    // the nnpic.xyz CDN. The host then fetches each image lazily through
+    // ImageRequestProvider::get_image_request, which injects Referer +
+    // User-Agent so the CDN doesn't route the request to a slow edge.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("wo-de-i-n-yuan-tuan"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga.clone(), false, true)
+        .expect("get manga update");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    let first = chs.first().expect("at least one chapter");
+    let pages = s
+        .get_page_list(manga, first.clone())
+        .expect("get page list");
+    assert!(
+        pages.len() >= 10,
+        "should have many pages, got {}",
+        pages.len()
+    );
+    for p in &pages {
+        match &p.content {
+            PageContent::Url(url, _) => {
+                assert!(
+                    url.starts_with("http://") || url.starts_with("https://"),
+                    "image url must be absolute, got {url}"
+                );
+                assert!(
+                    url.contains("nnpic.xyz"),
+                    "image url must point at the nnpic CDN, got {url}"
+                );
+            }
+            other => panic!("page must be a URL, got {other:?}"),
+        }
+    }
 }
 
 #[aidoku_test]
