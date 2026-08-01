@@ -152,6 +152,74 @@ fn get_page_list_returns_many_pages() {
 }
 
 #[aidoku_test]
+fn get_page_list_returns_lazy_urls_with_scramble_context() {
+    // Regression: get_page_list used to download + unscramble every sr:1
+    // image before returning, blocking chapter open for tens of seconds.
+    // Now every page is returned as a URL; scrambled URLs carry a
+    // {"scramble":"1"} PageContext so process_page_image can decode them
+    // lazily as the app loads each image.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga.clone(), false, true)
+        .expect("get manga update");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    let first = chs.first().expect("at least one chapter");
+    let pages: Vec<Page> = s
+        .get_page_list(manga, first.clone())
+        .expect("get page list");
+    assert!(
+        pages.len() >= 50,
+        "should have many pages, got {}",
+        pages.len()
+    );
+
+    let mut url_count = 0;
+    let mut scramble_tagged = 0;
+    let mut untagged_rmcdn = 0;
+    for p in &pages {
+        match &p.content {
+            PageContent::Url(url, ctx) => {
+                url_count += 1;
+                assert!(url.contains("r5.rmcdn"), "unexpected url: {url}");
+                let tagged = ctx
+                    .as_ref()
+                    .and_then(|c| c.get("scramble"))
+                    .is_some_and(|v| v == "1");
+                if url.contains("sr:1") {
+                    assert!(tagged, "sr:1 URL must carry scramble context: {url}");
+                    scramble_tagged += 1;
+                } else {
+                    assert!(
+                        !tagged,
+                        "non-sr:1 URL must not carry scramble context: {url}"
+                    );
+                    untagged_rmcdn += 1;
+                }
+            }
+            other => panic!("page content must be a URL, got {other:?}"),
+        }
+    }
+    // Rouman5 mixes sr:0 and sr:1 across a chapter; assert both flavors
+    // are actually present so the test exercises both branches.
+    assert!(
+        scramble_tagged >= 10,
+        "expected many sr:1 pages, got {scramble_tagged}"
+    );
+    assert!(
+        untagged_rmcdn >= 10,
+        "expected many sr:0 pages, got {untagged_rmcdn}"
+    );
+    assert_eq!(
+        url_count,
+        pages.len(),
+        "every page should be a URL, no pre-decoded images"
+    );
+}
+
 fn listing_provider_default_listing() {
     let s = new_source();
     let listing = Listing {

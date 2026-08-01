@@ -2,12 +2,14 @@
 
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format, vec};
+use aidoku::imports::canvas::ImageRef;
 use aidoku::imports::net::Request;
 use aidoku::register_source;
 use aidoku::{
     AidokuError, BaseUrlProvider, Chapter, DeepLinkHandler, DeepLinkResult, DynamicSettings,
-    FilterValue, Home, HomeLayout, Listing, ListingProvider, Manga, MangaPageResult, Page,
-    PageContent, Result, Source,
+    FilterValue, HashMap, Home, HomeLayout, ImageRequestProvider, ImageResponse, Listing,
+    ListingProvider, Manga, MangaPageResult, Page, PageContent, PageContext, PageImageProcessor,
+    Result, Source,
 };
 
 mod chapter;
@@ -83,28 +85,23 @@ impl Source for Roumanwu {
             urls.truncate(page_count as usize);
         }
 
-        Ok(urls
+        // Return every URL as PageContent::Url. Previously the parser eagerly
+        // downloaded and unscrambled every sr:1 image before returning, which
+        // serialized tens of large HTTP fetches on the chapter-open thread and
+        // made Aidoku's chapter load dramatically slower than the web reader.
+        // Scrambled URLs are tagged via PageContext so process_page_image can
+        // unscramble them as the app fetches each image lazily.
+        let pages = urls
             .into_iter()
             .map(|u| {
                 if unscramble_image_url(&u) {
-                    let image_data = Request::get(&u)
-                        .ok()
-                        .and_then(|r| r.data().ok())
-                        .unwrap_or_default();
-                    if let Some(image) = unscramble_image(&u, &image_data) {
-                        Page {
-                            content: PageContent::image(image),
-                            thumbnail: None,
-                            has_description: false,
-                            description: None,
-                        }
-                    } else {
-                        Page {
-                            content: PageContent::url(u),
-                            thumbnail: None,
-                            has_description: false,
-                            description: None,
-                        }
+                    let mut ctx: PageContext = HashMap::new();
+                    ctx.insert("scramble".into(), "1".into());
+                    Page {
+                        content: PageContent::url_context(u, ctx),
+                        thumbnail: None,
+                        has_description: false,
+                        description: None,
                     }
                 } else {
                     Page {
@@ -115,7 +112,9 @@ impl Source for Roumanwu {
                     }
                 }
             })
-            .collect())
+            .collect();
+
+        Ok(pages)
     }
 }
 
@@ -203,6 +202,43 @@ impl BaseUrlProvider for Roumanwu {
     }
 }
 
+// ---------- Image fetch + decode ----------
+
+// Some chapter pages ship as `sr:1` URLs whose rows have been reordered on
+// the CDN. We tag those in get_page_list's PageContext and let the app fetch
+// each image lazily (one per page render), then unscramble the bytes here.
+// The web reader only appears fast because it streams one image at a time
+// as the user scrolls; before this change Aidoku did the equivalent of
+// pre-loading every scrambled page before opening the chapter.
+impl PageImageProcessor for Roumanwu {
+    fn process_page_image(
+        &self,
+        response: ImageResponse,
+        context: Option<PageContext>,
+    ) -> Result<ImageRef> {
+        let needs_unscramble = context
+            .as_ref()
+            .and_then(|c| c.get("scramble"))
+            .is_some_and(|v| v == "1");
+        let url = response.request.url.as_deref().unwrap_or("");
+        if needs_unscramble {
+            if let Some(image) = unscramble_image(url, response.image.data().as_slice()) {
+                return Ok(image);
+            }
+        }
+        Ok(response.image)
+    }
+}
+
+// Pass the URL through unmodified. The existing eager Request::get path in
+// get_page_list (now removed) worked without extra headers, so the app's
+// default image fetch should too.
+impl ImageRequestProvider for Roumanwu {
+    fn get_image_request(&self, url: String, _context: Option<PageContext>) -> Result<Request> {
+        Ok(Request::get(&url)?)
+    }
+}
+
 #[cfg(test)]
 mod test;
 
@@ -212,5 +248,7 @@ register_source!(
     Home,
     DeepLinkHandler,
     DynamicSettings,
-    BaseUrlProvider
+    BaseUrlProvider,
+    PageImageProcessor,
+    ImageRequestProvider
 );
