@@ -68,10 +68,8 @@ fn chapter_url_is_absolute() {
 }
 
 #[aidoku_test]
-fn viewer_is_webtoon() {
-    // nnhanman is overwhelmingly webtoon-style; only the 3D category uses
-    // a different layout. Set the default to Webtoon so most chapters open
-    // in the correct reader mode.
+fn viewer_is_webtoon_for_plain_webtoon() {
+    // Default reading mode for a webtoon with no published/3D/JP tag.
     let s = new_source();
     let manga = Manga {
         key: String::from("wo-de-i-n-yuan-tuan"),
@@ -83,6 +81,42 @@ fn viewer_is_webtoon() {
     assert_eq!(
         updated.viewer,
         aidoku::Viewer::Webtoon,
-        "default viewer should be Webtoon"
+        "default viewer should be Webtoon for plain webtoon"
+    );
+}
+
+#[aidoku_test]
+fn viewer_is_right_to_left_for_3d_manga() {
+    // A manga tagged `3D` reads right-to-left.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("3d-wo-de-qi-zi-bu-da-dui-jin"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga, true, false)
+        .expect("get manga update should succeed");
+    assert_eq!(
+        updated.viewer,
+        aidoku::Viewer::RightToLeft,
+        "viewer should be RightToLeft for 3D manga"
+    );
+}
+
+#[aidoku_test]
+fn viewer_is_right_to_left_for_published_manga() {
+    // A manga tagged `出版漫画` reads right-to-left.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("zui-hou-de-chong-ci"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga, true, false)
+        .expect("get manga update should succeed");
+    assert_eq!(
+        updated.viewer,
+        aidoku::Viewer::RightToLeft,
+        "viewer should be RightToLeft for published manga"
     );
 }
