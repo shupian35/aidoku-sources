@@ -179,6 +179,49 @@ fn search_finds_known_manga() {
 }
 
 #[aidoku_test]
+fn chapter_list_first_entry_is_real_chapter_not_cta() {
+    // Regression: the detail page links to `/books/<key>/0` for the
+    // "開始閱讀" (start reading) CTA above the chapter grid. The parser used
+    // to pick it up as a phantom "chapter 0", which then surfaced as the
+    // first entry in the chapter list. The real chapter list starts with
+    // "第1話" inside the chapter grid container.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga, false, true)
+        .expect("get manga update should succeed");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    assert!(
+        chs.len() >= 10,
+        "should have many chapters, got {}",
+        chs.len()
+    );
+    for c in chs.iter() {
+        let title = c.title.as_deref().unwrap_or("");
+        assert_ne!(
+            title, "放入書架",
+            "phantom bookmark CTA should not appear as a chapter"
+        );
+        assert_ne!(
+            title, "開始閱讀",
+            "phantom start-reading CTA should not appear as a chapter"
+        );
+        let n = c.chapter_number.unwrap_or(0.0);
+        assert!(
+            n >= 1.0,
+            "no chapter should have chapter_number 0.0 (would sort to the \
+             top of the chapter list); got {} for key={} title={:?}",
+            n,
+            c.key,
+            c.title
+        );
+    }
+}
+
+#[aidoku_test]
 fn deep_link_dispatch() {
     let s = new_source();
     let r = s
