@@ -367,10 +367,44 @@ impl DynamicFilters for Nnhm7 {
 // The override flows through `get_base_url()` and is used everywhere a
 // URL is built — search, listing, manga/chapter fetches, deep-link
 // dispatches, and the Referer sent for chapter image fetches.
+//
+// The settings also carry the site's "重要提醒" notice so users can
+// reach the operator's contact email or the mirror landing page if the
+// configured host goes down.
 impl DynamicSettings for Nnhm7 {
 	fn get_dynamic_settings(&self) -> Result<Vec<aidoku::Setting>> {
 		let current_url = get_base_url();
 		Ok(vec![
+			aidoku::GroupSetting {
+				key: "notice".into(),
+				title: "鸟鸟韩漫重要提醒".into(),
+				footer: Some(concat!(
+					"近期天下不太平\n",
+					"请务必截图保存此页面，存到邮箱\n",
+					"发任意信息到这获得最新网址：nnhanman666@gmail.com\n",
+					"或将地址发布页 nnfb.xyz 加入浏览器收藏夹！如果网站无法访问请截图发给我们，收到信会最快速度修复！"
+				).into()),
+				items: vec![
+					aidoku::LinkSetting {
+						key: "contact_email".into(),
+						title: "发邮件：nnhanman666@gmail.com".into(),
+						url: "mailto:nnhanman666@gmail.com".into(),
+						external: Some(true),
+						..Default::default()
+					}
+					.into(),
+					aidoku::LinkSetting {
+						key: "mirror_url".into(),
+						title: "地址发布页：nnfb.xyz".into(),
+						url: "https://nnfb.xyz".into(),
+						external: Some(true),
+						..Default::default()
+					}
+					.into(),
+				],
+				..Default::default()
+			}
+			.into(),
 			aidoku::TextSetting {
 				key: "base_url".into(),
 				title: "源地址".into(),
