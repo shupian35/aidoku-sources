@@ -225,7 +225,7 @@ impl Source for Nnhm7 {
 		// right-to-left and should use the manga viewer instead.
 		let viewer = if tags
 			.iter()
-			.any(|t| matches!(t.as_str(), "\u{51FA}\u{7248}\u{6F2B}\u{753B}" | "3D" | "\u{65E5}\u{6F2B}"))
+			.any(|t| matches!(t.as_str(), "3D" | "\u{65E5}\u{6F2B}"))
 		{
 			Viewer::RightToLeft
 		} else {
