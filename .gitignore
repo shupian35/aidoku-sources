@@ -1,4 +1,4 @@
-﻿
+
 # Rust
 target/
 **/*.rs.bk
@@ -9,3 +9,7 @@ package.aix
 
 **/AGENTS.md
 AGENTS.md
+
+# MiMoCode
+.mimocode
+.worktrees
