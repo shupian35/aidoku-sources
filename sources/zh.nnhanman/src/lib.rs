@@ -2,21 +2,22 @@
 
 use aidoku::{
 	AidokuError, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult, DynamicFilters, Filter,
-	FilterValue, Home, HomeComponent, HomeComponentValue, HomeLayout, Link, LinkValue, Manga,
-	MangaPageResult, MangaStatus, Page, PageContent, Result, SelectFilter, SortFilter, Source,
-	Viewer,
+	FilterValue, Home, HomeComponent, HomeComponentValue, HomeLayout, ImageRequestProvider,
+	Link, LinkValue, Manga, MangaPageResult, MangaStatus, Page, PageContent, PageContext, Result,
+	SelectFilter, SortFilter, Source, Viewer,
 };
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format, vec};
 use aidoku::helpers::uri::encode_uri;
 use aidoku::imports::html::Html;
+use aidoku::imports::net::Request;
 use aidoku::prelude::*;
 
 mod parser;
 mod source_url;
 
 use parser::{has_next_page, parse_manga_grid, parse_manga_list, slug_from_url};
-use source_url::{BASE_URL, html_get_string};
+use source_url::{BASE_URL, USER_AGENT, html_get_string};
 
 struct Nnhm7;
 
@@ -467,7 +468,21 @@ impl DeepLinkHandler for Nnhm7 {
 	}
 }
 
-register_source!(Nnhm7, DynamicFilters, Home, DeepLinkHandler);
+// Chapter pages come from `last.nnpic.xyz` and the CDN is noticeably faster
+// when requests look like the web reader (Referer to nnhm7.com, desktop UA).
+// Without these headers the host's per-image lazy fetch ends up on a slow
+// edge, so reading a chapter feels much slower than the web. Mirror the
+// headers `html_get_string` already sends, plus a `Referer` pointing at
+// this site so the CDN accepts the request as in-app browsing.
+impl ImageRequestProvider for Nnhm7 {
+	fn get_image_request(&self, url: String, _context: Option<PageContext>) -> Result<Request> {
+		Ok(Request::get(&url)?
+			.header("User-Agent", USER_AGENT)
+			.header("Referer", BASE_URL))
+	}
+}
+
+register_source!(Nnhm7, DynamicFilters, Home, DeepLinkHandler, ImageRequestProvider);
 
 #[cfg(test)]
 mod test;
