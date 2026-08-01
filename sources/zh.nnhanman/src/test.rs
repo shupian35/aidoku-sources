@@ -3,9 +3,18 @@ use aidoku::{Manga, PageContent, Source};
 use aidoku_test::aidoku_test;
 
 use super::Nnhm7;
+use crate::source_url::{BASE_URL, get_base_url};
 
 fn new_source() -> Nnhm7 {
     <Nnhm7 as Source>::new()
+}
+
+#[aidoku_test]
+fn get_base_url_defaults_to_const_when_no_override() {
+    // With no `base_url` dynamic setting set, every URL the source builds
+    // must use the hard-coded `BASE_URL` constant. The override path is
+    // exercised at runtime when a user sets the dynamic setting.
+    assert_eq!(get_base_url(), BASE_URL);
 }
 
 #[aidoku_test]

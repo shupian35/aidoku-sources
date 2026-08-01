@@ -1,10 +1,10 @@
 #![no_std]
 
 use aidoku::{
-	AidokuError, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult, DynamicFilters, Filter,
-	FilterValue, Home, HomeComponent, HomeComponentValue, HomeLayout, ImageRequestProvider,
-	Link, LinkValue, Manga, MangaPageResult, MangaStatus, Page, PageContent, PageContext, Result,
-	SelectFilter, SortFilter, Source, Viewer,
+	AidokuError, BaseUrlProvider, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult,
+	DynamicFilters, DynamicSettings, Filter, FilterValue, Home, HomeComponent, HomeComponentValue,
+	HomeLayout, ImageRequestProvider, Link, LinkValue, Manga, MangaPageResult, MangaStatus, Page,
+	PageContent, PageContext, Result, SelectFilter, SortFilter, Source, Viewer,
 };
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format, vec};
@@ -17,7 +17,7 @@ mod parser;
 mod source_url;
 
 use parser::{has_next_page, parse_manga_grid, parse_manga_list, slug_from_url};
-use source_url::{BASE_URL, USER_AGENT, html_get_string};
+use source_url::{BASE_URL, USER_AGENT, get_base_url, html_get_string};
 
 struct Nnhm7;
 
@@ -36,7 +36,7 @@ impl Source for Nnhm7 {
 		if !q.is_empty() {
 			// Text search via the site's search endpoint.
 			let encoded = encode_uri(q);
-			let url = format!("{}/catalog.php?key={}", BASE_URL, encoded);
+			let url = format!("{}/catalog.php?key={}", get_base_url(), encoded);
 			let html = html_get_string(&url)?;
 			let entries = parse_manga_grid(&html)?;
 			let has_next = has_next_page(&html, page);
@@ -80,7 +80,7 @@ impl Source for Nnhm7 {
 		match kind.as_str() {
 			// /update is a single page rendered with div.itemBox cards.
 			"latest" => {
-				let url = format!("{}/update", BASE_URL);
+				let url = format!("{}/update", get_base_url());
 				let html = html_get_string(&url)?;
 				let entries = parse_manga_list(&html).unwrap_or_default();
 				Ok(MangaPageResult {
@@ -90,7 +90,7 @@ impl Source for Nnhm7 {
 			}
 			// /ranking (总榜) is a single page rendered with div.itemBox cards.
 			"ranking" => {
-				let url = format!("{}/ranking", BASE_URL);
+				let url = format!("{}/ranking", get_base_url());
 				let html = html_get_string(&url)?;
 				let entries = parse_manga_list(&html).unwrap_or_default();
 				Ok(MangaPageResult {
@@ -104,7 +104,7 @@ impl Source for Nnhm7 {
 			_ => {
 				let url = format!(
 					"{}/comics/{}/ob/{}/st/{}/page/{}",
-					BASE_URL, category, sort, status, page
+					get_base_url(), category, sort, status, page
 				);
 				let html = html_get_string(&url)?;
 				let entries = parse_manga_grid(&html).unwrap_or_default();
@@ -127,7 +127,7 @@ impl Source for Nnhm7 {
 		if key.is_empty() {
 			return Err(AidokuError::message("missing manga key"));
 		}
-		let url = format!("{}/comic/{}.html", BASE_URL, key);
+		let url = format!("{}/comic/{}.html", get_base_url(), key);
 		let html = html_get_string(&url)?;
 		let doc = Html::parse(&html)?;
 
@@ -212,7 +212,7 @@ impl Source for Nnhm7 {
 					// browser" button on the chapter detail page can hand it
 					// straight to the OS browser. `href` from the chapter
 					// list is a site-relative path (`/comic/<slug>/chapter-N.html`).
-					url: Some(format!("{}{}", BASE_URL, href)),
+					url: Some(format!("{}{}", get_base_url(), href)),
 					..Default::default()
 				});
 			}
@@ -238,7 +238,7 @@ impl Source for Nnhm7 {
 			cover,
 			authors,
 			description,
-			url: Some(format!("{}/comic/{}.html", BASE_URL, key)),
+			url: Some(format!("{}/comic/{}.html", get_base_url(), key)),
 			tags: Some(tags),
 			status,
 			chapters: Some(chapters),
@@ -255,13 +255,13 @@ impl Source for Nnhm7 {
 			.unwrap_or_else(|| {
 				format!(
 					"{}/comic/{}/chapter-{}.html",
-					BASE_URL, _manga.key, chapter.key
+					get_base_url(), _manga.key, chapter.key
 				)
 			});
 		let full_url = if chap_url.starts_with("http") {
 			chap_url
 		} else {
-			format!("{}{}", BASE_URL, chap_url)
+			format!("{}{}", get_base_url(), chap_url)
 		};
 		let html = html_get_string(&full_url)?;
 		let doc = Html::parse(&html)?;
@@ -363,9 +363,35 @@ impl DynamicFilters for Nnhm7 {
 	}
 }
 
+// Lets users override the upstream host in the source's settings page.
+// The override flows through `get_base_url()` and is used everywhere a
+// URL is built — search, listing, manga/chapter fetches, deep-link
+// dispatches, and the Referer sent for chapter image fetches.
+impl DynamicSettings for Nnhm7 {
+	fn get_dynamic_settings(&self) -> Result<Vec<aidoku::Setting>> {
+		let current_url = get_base_url();
+		Ok(vec![
+			aidoku::TextSetting {
+				key: "base_url".into(),
+				title: "源地址".into(),
+				placeholder: Some(BASE_URL.into()),
+				default: Some(current_url.into()),
+				..Default::default()
+			}
+			.into(),
+		])
+	}
+}
+
+impl BaseUrlProvider for Nnhm7 {
+	fn get_base_url(&self) -> Result<String> {
+		Ok(get_base_url())
+	}
+}
+
 impl Home for Nnhm7 {
 	fn get_home(&self) -> Result<HomeLayout> {
-		let html = html_get_string(&format!("{}/", BASE_URL))?;
+		let html = html_get_string(&format!("{}/", get_base_url()))?;
 		let doc = Html::parse(&html)?;
 
 		let mut components = Vec::new();
@@ -478,11 +504,11 @@ impl ImageRequestProvider for Nnhm7 {
 	fn get_image_request(&self, url: String, _context: Option<PageContext>) -> Result<Request> {
 		Ok(Request::get(&url)?
 			.header("User-Agent", USER_AGENT)
-			.header("Referer", BASE_URL))
+			.header("Referer", get_base_url().as_str()))
 	}
 }
 
-register_source!(Nnhm7, DynamicFilters, Home, DeepLinkHandler, ImageRequestProvider);
+register_source!(Nnhm7, DynamicFilters, Home, DeepLinkHandler, ImageRequestProvider, DynamicSettings, BaseUrlProvider);
 
 #[cfg(test)]
 mod test;
