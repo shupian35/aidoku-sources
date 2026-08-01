@@ -16,9 +16,9 @@
     {
       "id": "zh.roumanwu",
       "name": "肉漫屋",
-      "version": 2,
-      "iconURL": "icons/zh.roumanwu-v2.png",
-      "downloadURL": "sources/zh.roumanwu-v2.aix",
+      "version": 3,
+      "iconURL": "icons/zh.roumanwu-v3.png",
+      "downloadURL": "sources/zh.roumanwu-v3.aix",
       "languages": [
         "zh"
       ],
