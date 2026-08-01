@@ -77,7 +77,14 @@ impl Source for Roumanwu {
             .url
             .clone()
             .unwrap_or_else(|| format!("/books/{}/{}", manga.key, chapter.key));
-        let full = format!("{}{}", get_base_url(), path);
+        // Chapter.url may be absolute (preferred; Aidoku's "open in browser"
+        // button uses it as-is) or relative (legacy); only prepend the base
+        // for relative paths so we don't end up with `https://xhttps://x/...`.
+        let full = if path.starts_with("http://") || path.starts_with("https://") {
+            path
+        } else {
+            format!("{}{}", get_base_url(), path)
+        };
         let html = html_get_string(&full)?;
         let (page_count, mut urls) = parse_chapter_pages(&html)?;
 

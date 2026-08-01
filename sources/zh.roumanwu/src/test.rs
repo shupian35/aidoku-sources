@@ -122,6 +122,33 @@ fn get_manga_update_returns_chapter_list() {
 }
 
 #[aidoku_test]
+fn chapter_url_is_absolute() {
+    // Regression: the chapter detail page renders an "open in browser"
+    // button. Aidoku dispatches that using the chapter's `url` field, which
+    // must be an absolute URL. The previous code stored only the relative
+    // path (`/books/<key>/<idx>`), so the button silently did nothing.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga, false, true)
+        .expect("get manga update should succeed");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    let c = chs.first().expect("at least one chapter");
+    let url = c.url.as_deref().expect("chapter url set");
+    assert!(
+        url.starts_with("http://") || url.starts_with("https://"),
+        "chapter url must be absolute, got {url}"
+    );
+    assert!(
+        url.contains("/books/"),
+        "chapter url must point at the chapter, got {url}"
+    );
+}
+
+#[aidoku_test]
 fn get_page_list_returns_many_pages() {
     let s = new_source();
     let manga = Manga {
