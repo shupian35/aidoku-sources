@@ -9,6 +9,7 @@ use aidoku_test::aidoku_test;
 use super::Roumanwu;
 use crate::chapter::{build_pages, page_count, resolve_chapter_url, truncate_to_page_count};
 use crate::listing::extract_manga_cards;
+use crate::utils::{json_top_level_object_field, json_top_level_string};
 
 fn new_source() -> Roumanwu {
     <Roumanwu as Source>::new()
@@ -492,4 +493,28 @@ fn extract_manga_cards_skips_empty_titles() {
     let cards = extract_manga_cards(html).expect("parse");
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0].key, "b");
+}
+
+#[aidoku_test]
+fn json_top_level_string_returns_value() {
+    let json = r#"{"name":"Hajime no Ippo","other":42}"#;
+    assert_eq!(
+        json_top_level_string(json, "name").as_deref(),
+        Some("Hajime no Ippo")
+    );
+}
+
+#[aidoku_test]
+fn json_top_level_object_field_returns_nested_value() {
+    let json = r#"{"author":{"name":"George Morikawa","@type":"Person"}}"#;
+    assert_eq!(
+        json_top_level_object_field(json, "author", "name").as_deref(),
+        Some("George Morikawa")
+    );
+}
+
+#[aidoku_test]
+fn json_top_level_object_field_returns_none_when_parent_is_string() {
+    let json = r#"{"author":"anonymous"}"#;
+    assert_eq!(json_top_level_object_field(json, "author", "name"), None);
 }

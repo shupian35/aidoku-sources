@@ -216,10 +216,10 @@ pub(crate) fn base64_decode(input: &str) -> Vec<u8> {
 
 // ---------- JSON helpers ----------
 
-pub(crate) fn json_string(haystack: &str, key: &str) -> Option<String> {
+pub(crate) fn json_top_level_string(json: &str, key: &str) -> Option<String> {
     let needle = format!("\"{}\":\"", key);
-    let i = haystack.find(&needle)? + needle.len();
-    let rest = &haystack[i..];
+    let i = json.find(&needle)? + needle.len();
+    let rest = &json[i..];
     // Find the closing quote, handling escaped quotes
     let mut j = 0;
     let chars: Vec<char> = rest.chars().collect();
@@ -292,4 +292,17 @@ pub(crate) fn json_string(haystack: &str, key: &str) -> Option<String> {
         }
     }
     Some(out)
+}
+
+/// Extract a nested string field from a top-level object whose value is itself
+/// an object: `"parent":{"child":"value"}`.
+///
+/// Returns `None` if `parent` isn't present as an object or `child` isn't a
+/// string inside it. Reuses [`json_top_level_string`] for the inner parse so
+/// the escape-sequence logic stays in one place.
+pub(crate) fn json_top_level_object_field(json: &str, parent: &str, child: &str) -> Option<String> {
+    let open = format!("\"{}\":{{", parent);
+    let i = json.find(&open)? + open.len();
+    let rest = &json[i..];
+    json_top_level_string(rest, child)
 }

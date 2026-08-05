@@ -9,7 +9,7 @@ use aidoku::alloc::{String, Vec, format, vec};
 use aidoku::{Chapter, ContentRating, Manga, MangaStatus, Result, Viewer};
 
 use crate::source_url::get_base_url;
-use crate::utils::{json_string, slice_between};
+use crate::utils::{json_top_level_object_field, json_top_level_string, slice_between};
 
 // "第N話 ..." -> (N, "...") where 第 = U+7B2C, 話 = U+8A71.
 fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
@@ -67,17 +67,11 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
         .replace("&amp;", "&")
         .replace("&#039;", "'");
 
-    let title = json_string(&json_ld, "name").unwrap_or_default();
-    let cover = json_string(&json_ld, "image");
-    let description = json_string(&json_ld, "description");
-    let author_str: Option<String> = json_string(&json_ld, "author").or_else(|| {
-        if let Some(i) = json_ld.find("\"author\":{") {
-            let rest = &json_ld[i + 10..];
-            json_string(rest, "name")
-        } else {
-            None
-        }
-    });
+    let title = json_top_level_string(&json_ld, "name").unwrap_or_default();
+    let cover = json_top_level_string(&json_ld, "image");
+    let description = json_top_level_string(&json_ld, "description");
+    let author_str: Option<String> = json_top_level_string(&json_ld, "author")
+        .or_else(|| json_top_level_object_field(&json_ld, "author", "name"));
 
     let mut tags: Vec<String> = Vec::new();
     if let Some(arr_start) = json_ld.find("\"genre\":[") {
