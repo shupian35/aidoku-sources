@@ -8,6 +8,7 @@ use aidoku_test::aidoku_test;
 
 use super::Roumanwu;
 use crate::chapter::{build_pages, page_count, resolve_chapter_url, truncate_to_page_count};
+use crate::listing::extract_manga_cards;
 
 fn new_source() -> Roumanwu {
     <Roumanwu as Source>::new()
@@ -447,4 +448,48 @@ fn deep_link_dispatch() {
         .handle_deep_link(String::from("https://example.com/foo"))
         .expect("deep link");
     assert!(r.is_none(), "unknown URL should return None, got {r:?}");
+}
+
+#[aidoku_test]
+fn extract_manga_cards_returns_empty_for_no_anchors() {
+    let cards = extract_manga_cards("<html>no manga links here</html>").expect("parse");
+    assert!(cards.is_empty());
+}
+
+#[aidoku_test]
+fn extract_manga_cards_returns_manga_for_valid_anchor() {
+    let html = r#"<a href="/books/abc123"><div class="truncate text-sm md:text-base text-foreground">Title A</div><div style="background-image:url(&quot;https://x/c.jpg&quot;)"></div></a>"#;
+    let cards = extract_manga_cards(html).expect("parse");
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].key, "abc123");
+    assert_eq!(cards[0].title, "Title A");
+    assert_eq!(cards[0].cover.as_deref(), Some("https://x/c.jpg"));
+}
+
+#[aidoku_test]
+fn extract_manga_cards_skips_chapter_anchors() {
+    // /books/{id}/{N} has 3 slashes — chapter anchors, not manga list entries.
+    let html = r#"<a href="/books/abc/1"><div class="truncate text-foreground">chap</div></a><a href="/books/xyz"><div class="truncate text-foreground">manga</div></a>"#;
+    let cards = extract_manga_cards(html).expect("parse");
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].key, "xyz");
+}
+
+#[aidoku_test]
+fn extract_manga_cards_dedupes_repeated_keys() {
+    let html = r#"
+        <a href="/books/dup"><div class="truncate text-foreground">first</div></a>
+        <a href="/books/dup"><div class="truncate text-foreground">second</div></a>
+    "#;
+    let cards = extract_manga_cards(html).expect("parse");
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].title, "first", "first occurrence wins");
+}
+
+#[aidoku_test]
+fn extract_manga_cards_skips_empty_titles() {
+    let html = r#"<a href="/books/a"><div class="truncate text-foreground">   </div></a><a href="/books/b"><div class="truncate text-foreground">real</div></a>"#;
+    let cards = extract_manga_cards(html).expect("parse");
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].key, "b");
 }

@@ -2,17 +2,14 @@
 //!
 //! The rouman5.com home page is rendered server-side but uses Tailwind class
 //! hashes that don't survive into stable CSS selectors. We locate each section
-//! by its title string, slice the surrounding HTML, then extract the manga
-//! cards inline.
+//! by its title string, slice the surrounding HTML, then hand the section
+//! slice to [`crate::listing::extract_manga_cards`] for DOM-based card
+//! extraction — the same parser the listing and search pages use.
 
-use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format, vec};
-use aidoku::{
-    ContentRating, HomeComponent, HomeComponentValue, HomeLayout, Link, LinkValue, Manga, Result,
-    Viewer,
-};
+use aidoku::{HomeComponent, HomeComponentValue, HomeLayout, Link, LinkValue, Result};
 
-use crate::source_url::get_base_url;
+use crate::listing::extract_manga_cards;
 
 #[derive(Clone, Copy)]
 enum HomeSectionKind {
@@ -60,25 +57,6 @@ const HOME_SECTIONS: &[SectionSpec] = &[
     (&["已完結"], &["完結精選"], HomeSectionKind::Scroller),
 ];
 
-// Extract text from a div with a specific CSS class.
-fn extract_div_text<'a>(block: &'a str, class: &str) -> Option<String> {
-    let class_attr = format!("class=\"{}\"", class);
-    let class_pos = block.find(&class_attr)?;
-    let after_class = &block[class_pos + class_attr.len()..];
-    let close_tag = after_class.find(">")?;
-    let after_close = &after_class[close_tag + 1..];
-    let end_tag = after_close.find("</div>")?;
-    Some(after_close[..end_tag].trim().to_string())
-}
-
-// Extract the first cover image URL from a card block (background-image style).
-fn extract_first_cover(block: &str) -> Option<String> {
-    let bg_marker = "background-image:url(&quot;";
-    let bg_start = block.find(bg_marker)? + bg_marker.len();
-    let bg_end = block[bg_start..].find("&quot;")?;
-    Some(block[bg_start..bg_start + bg_end].to_string())
-}
-
 pub(crate) fn parse_home_layout(html: &str) -> Result<HomeLayout> {
     let mut components: Vec<HomeComponent> = Vec::new();
     for (titles, subtitles, kind) in HOME_SECTIONS {
@@ -118,71 +96,21 @@ pub(crate) fn parse_home_layout(html: &str) -> Result<HomeLayout> {
             .min()
             .unwrap_or(html.len());
         let range = &html[t_idx..end_idx];
-        let mut links: Vec<Link> = Vec::new();
-        let mut mangas: Vec<Manga> = Vec::new();
-        let mut seen: Vec<String> = Vec::new();
-        let mut search = 0;
-        let anchor = "<a href=\"/books/";
-        while let Some(rel) = range[search..].find(anchor) {
-            let abs = search + rel;
-            if let Some(close_rel) = range[abs..].find("</a>") {
-                let block = &range[abs..abs + close_rel + 4];
-                let href_start: usize = 9;
-                if block.len() < href_start + 2 {
-                    search = abs + close_rel + 4;
-                    continue;
-                }
-                let href_end = match block[href_start..].find(0x22 as char) {
-                    Some(i) => href_start + i,
-                    None => {
-                        search = abs + close_rel + 4;
-                        continue;
-                    }
-                };
-                let href = block[href_start..href_end].to_string();
-                if href.matches('/').count() != 2 {
-                    search = abs + close_rel + 4;
-                    continue;
-                }
 
-                let class1 = "truncate text-sm md:text-base text-foreground";
-                let class2 = "line-clamp-2 h-10 text-sm";
-                let a = extract_div_text(block, class1);
-                let b = extract_div_text(block, class2);
-                let card_title = a.or(b).unwrap_or_default().trim().to_string();
+        // Shared DOM parser produces Manga entries; the BigScroller arm
+        // needs them directly, while Scroller/MangaList wrap each one in a
+        // Link so the UI shows titles + cover thumbnails.
+        let mangas: Vec<aidoku::Manga> = extract_manga_cards(range)?;
+        let links: Vec<Link> = mangas
+            .iter()
+            .map(|m| Link {
+                title: m.title.clone(),
+                subtitle: None,
+                image_url: m.cover.clone(),
+                value: Some(LinkValue::Manga(m.clone())),
+            })
+            .collect();
 
-                if card_title.is_empty() {
-                    search = abs + close_rel + 4;
-                    continue;
-                }
-                let cover = extract_first_cover(block);
-                let key = href.rsplit('/').next().unwrap_or("").to_string();
-                if key.is_empty() || seen.contains(&key) {
-                    search = abs + close_rel + 4;
-                    continue;
-                }
-                seen.push(key.clone());
-                let manga = Manga {
-                    key,
-                    title: card_title.clone(),
-                    cover: cover.clone(),
-                    url: Some(format!("{}{}", get_base_url(), href)),
-                    viewer: Viewer::Webtoon,
-                    content_rating: ContentRating::NSFW,
-                    ..Default::default()
-                };
-                mangas.push(manga.clone());
-                links.push(Link {
-                    title: card_title,
-                    subtitle: None,
-                    image_url: cover,
-                    value: Some(LinkValue::Manga(manga)),
-                });
-                search = abs + close_rel + 4;
-            } else {
-                break;
-            }
-        }
         let subtitle = subtitles.first().map(|s| String::from(*s));
         let value = match *kind {
             HomeSectionKind::BigScroller => HomeComponentValue::BigScroller {
