@@ -49,69 +49,10 @@ pub(crate) fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
         }
     }
 
-    // Determine page count
-    let mut page_count: i32 = {
-        let json_ld_raw = slice_between(html, "<script type=\"application/ld+json\">", "</script>")
-            .unwrap_or("")
-            .replace("&quot;", "\"")
-            .replace("&amp;", "&");
-        let needle = "numberOfPages";
-        let v = if let Some(i) = json_ld_raw.find(needle) {
-            let after = &json_ld_raw[i + needle.len()..];
-            let mut s = 0;
-            while s < after.len() && (after.as_bytes()[s] == b':' || after.as_bytes()[s] == b' ') {
-                s += 1;
-            }
-            let digits: String = after[s..]
-                .chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect();
-            digits.parse().unwrap_or(0)
-        } else {
-            0
-        };
-        v
-    };
-    if page_count == 0 {
-        let mut i = 0;
-        while let Some(rel) = html[i..].find("<!-- -->/<!-- -->") {
-            let abs = i + rel;
-            let after = &html[abs + 18..];
-            let head: String = after.chars().take(40).collect();
-            let after_digits: String = head.chars().skip_while(|c| c.is_ascii_digit()).collect();
-            if let Some(d_end) = after_digits.find("<!-- -->頁") {
-                let digits: String = after_digits[..d_end]
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit())
-                    .collect();
-                if let Ok(n) = digits.parse::<i32>() {
-                    page_count = n;
-                    break;
-                }
-            }
-            i = abs + 1;
-        }
-    }
-    if page_count == 0 {
-        let mut i = 0;
-        while let Some(rel) = payload[i..].find("\"/\",") {
-            let abs = i + rel;
-            let after = &payload[abs + 4..];
-            let head: String = after.chars().take(60).collect();
-            if let Some(d_end) = head.find("\",\"頁\"") {
-                let digits: String = head[..d_end]
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit())
-                    .collect();
-                if let Ok(n) = digits.parse::<i32>() {
-                    page_count = n;
-                    break;
-                }
-            }
-            i = abs + 1;
-        }
-    }
-
+    // Determine page count via the prioritized heuristic chain.
+    // None means no heuristic matched; caller treats that as 0 to
+    // preserve prior behaviour.
+    let page_count: i32 = page_count(html, &payload).unwrap_or(0);
     // Extract (imageUrl, ind) pairs from the concatenated payload
     let mut entries: Vec<(i32, String)> = Vec::new();
     let bytes = payload.as_bytes();
@@ -224,4 +165,101 @@ pub(crate) fn build_pages(urls: Vec<(String, bool)>) -> Vec<Page> {
             }
         })
         .collect()
+}
+
+// ---------- Page-count heuristics ----------
+
+/// Site-specific way of extracting the page count from a chapter HTML.
+///
+/// Each variant owns one encoding the CDN ships (JSON-LD schema, HTML
+/// comment split, React Server Components payload). The chain walks them in
+/// priority order and returns the first match.
+enum PageCountHeuristic {
+    JsonLd,
+    HtmlComment,
+    RscPayload,
+}
+
+impl PageCountHeuristic {
+    fn run(&self, html: &str, payload: &str) -> Option<i32> {
+        match self {
+            Self::JsonLd => json_ld_count(html),
+            Self::HtmlComment => html_comment_count(html),
+            Self::RscPayload => rsc_payload_count(payload),
+        }
+    }
+}
+
+const PAGE_COUNT_CHAIN: &[PageCountHeuristic] = &[
+    PageCountHeuristic::JsonLd,
+    PageCountHeuristic::HtmlComment,
+    PageCountHeuristic::RscPayload,
+];
+
+/// Walk the page-count heuristic chain and return the first match.
+///
+/// Returns `None` when no heuristic extracts a count. Callers decide how to
+/// interpret "unknown" — `parse_chapter_pages` falls back to `0`.
+pub(crate) fn page_count(html: &str, payload: &str) -> Option<i32> {
+    PAGE_COUNT_CHAIN.iter().find_map(|h| h.run(html, payload))
+}
+
+fn json_ld_count(html: &str) -> Option<i32> {
+    let json_ld_raw = slice_between(html, "<script type=\"application/ld+json\">", "</script>")
+        .unwrap_or("")
+        .replace("&quot;", "\"")
+        .replace("&amp;", "&");
+    let needle = "numberOfPages";
+    let i = json_ld_raw.find(needle)?;
+    let after = &json_ld_raw[i + needle.len()..];
+    let mut s = 0;
+    while s < after.len() && (after.as_bytes()[s] == b':' || after.as_bytes()[s] == b' ') {
+        s += 1;
+    }
+    let digits: String = after[s..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
+}
+
+fn html_comment_count(html: &str) -> Option<i32> {
+    let mut i = 0;
+    while let Some(rel) = html[i..].find("<!-- -->/<!-- -->") {
+        let abs = i + rel;
+        let after = &html[abs + 18..];
+        let head: String = after.chars().take(40).collect();
+        let after_digits: String = head.chars().skip_while(|c| c.is_ascii_digit()).collect();
+        if let Some(d_end) = after_digits.find("<!-- -->頁") {
+            let digits: String = after_digits[..d_end]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(n) = digits.parse::<i32>() {
+                return Some(n);
+            }
+        }
+        i = abs + 1;
+    }
+    None
+}
+
+fn rsc_payload_count(payload: &str) -> Option<i32> {
+    let mut i = 0;
+    while let Some(rel) = payload[i..].find("\"/\",") {
+        let abs = i + rel;
+        let after = &payload[abs + 4..];
+        let head: String = after.chars().take(60).collect();
+        if let Some(d_end) = head.find("\",\"頁\"") {
+            let digits: String = head[..d_end]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(n) = digits.parse::<i32>() {
+                return Some(n);
+            }
+        }
+        i = abs + 1;
+    }
+    None
 }

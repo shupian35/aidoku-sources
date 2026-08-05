@@ -7,7 +7,7 @@ use aidoku::{
 use aidoku_test::aidoku_test;
 
 use super::Roumanwu;
-use crate::chapter::{build_pages, resolve_chapter_url, truncate_to_page_count};
+use crate::chapter::{build_pages, page_count, resolve_chapter_url, truncate_to_page_count};
 
 fn new_source() -> Roumanwu {
     <Roumanwu as Source>::new()
@@ -207,6 +207,46 @@ fn chapter_url_is_absolute() {
         url.contains("/books/"),
         "chapter url must point at the chapter, got {url}"
     );
+}
+
+#[aidoku_test]
+fn page_count_resolves_json_ld_value() {
+    let html = r#"<script type="application/ld+json">{"numberOfPages":42}</script>"#;
+    assert_eq!(page_count(html, ""), Some(42));
+}
+
+#[aidoku_test]
+fn page_count_resolves_html_comment_split() {
+    // <!-- -->N<!-- -->/<!-- -->(junk)<!-- -->頁  ← site splits digits across HTML comments
+    let html = "<!-- -->7<!-- -->/<!-- -->more<!-- -->頁 trailing";
+    assert_eq!(page_count(html, ""), Some(7));
+}
+
+#[aidoku_test]
+fn page_count_resolves_rsc_payload_marker() {
+    // Rouman5 RSC payload: "/",  N  ,"頁"  — the digits are caught between the two strings.
+    let payload = r#"random"/","12","頁"trailing"#;
+    assert_eq!(page_count("", payload), Some(12));
+}
+
+#[aidoku_test]
+fn page_count_returns_none_when_all_heuristics_fail() {
+    assert_eq!(page_count("", ""), None);
+    assert_eq!(
+        page_count("<html>nothing useful</html>", "no markers"),
+        None
+    );
+}
+
+#[aidoku_test]
+fn page_count_prefers_json_ld_over_other_heuristics() {
+    // All three heuristics could match; JSON-LD wins because it is first in the chain.
+    let html = r#"
+        <script type="application/ld+json">{"numberOfPages":1}</script>
+        <!-- -->999<!-- -->/<!-- -->more<!-- -->頁
+    "#;
+    let payload = r#""/","9","頁""#;
+    assert_eq!(page_count(html, payload), Some(1));
 }
 
 #[aidoku_test]
