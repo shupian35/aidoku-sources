@@ -7,6 +7,7 @@ use aidoku::{
 use aidoku_test::aidoku_test;
 
 use super::Roumanwu;
+use crate::chapter::{build_pages, resolve_chapter_url, truncate_to_page_count};
 
 fn new_source() -> Roumanwu {
     <Roumanwu as Source>::new()
@@ -122,11 +123,71 @@ fn get_manga_update_returns_chapter_list() {
 }
 
 #[aidoku_test]
+fn resolve_chapter_url_passes_absolute_through() {
+    let url = resolve_chapter_url("https://other.example/books/x/1", "https://rouman5.com");
+    assert_eq!(url, "https://other.example/books/x/1");
+}
+
+#[aidoku_test]
+fn resolve_chapter_url_prepends_base_for_relative_path() {
+    let url = resolve_chapter_url("/books/x/1", "https://rouman5.com");
+    assert_eq!(url, "https://rouman5.com/books/x/1");
+}
+
+#[aidoku_test]
+fn truncate_to_page_count_caps_at_page_count() {
+    let urls: Vec<String> = (0..20).map(|i| format!("https://x/{i}")).collect();
+    let out = truncate_to_page_count(urls, 5);
+    assert_eq!(out.len(), 5);
+}
+
+#[aidoku_test]
+fn truncate_to_page_count_is_noop_when_zero_or_too_small() {
+    let urls: Vec<String> = (0..3).map(|i| format!("https://x/{i}")).collect();
+    assert_eq!(truncate_to_page_count(urls.clone(), 0).len(), 3);
+    assert_eq!(truncate_to_page_count(urls, 99).len(), 3);
+}
+
+#[aidoku_test]
+fn build_pages_marks_scrambled_urls_with_context() {
+    let tagged = vec![
+        (String::from("https://x/a"), false),
+        (String::from("https://x/b-sr:1"), true),
+    ];
+    let pages = build_pages(tagged);
+    assert_eq!(pages.len(), 2);
+    match &pages[0].content {
+        PageContent::Url(url, ctx) => {
+            assert_eq!(url, "https://x/a");
+            assert!(ctx.is_none(), "non-scrambled URL must have no context");
+        }
+        other => panic!("expected Url, got {other:?}"),
+    }
+    match &pages[1].content {
+        PageContent::Url(url, ctx) => {
+            assert_eq!(url, "https://x/b-sr:1");
+            let ctx = ctx.as_ref().expect("scrambled URL must carry context");
+            assert_eq!(ctx.get("scramble").map(String::as_str), Some("1"));
+        }
+        other => panic!("expected Url, got {other:?}"),
+    }
+}
+
+#[aidoku_test]
+fn build_pages_handles_empty_input() {
+    let pages = build_pages(Vec::new());
+    assert!(pages.is_empty());
+}
+
+#[aidoku_test]
 fn chapter_url_is_absolute() {
     // Regression: the chapter detail page renders an "open in browser"
     // button. Aidoku dispatches that using the chapter's `url` field, which
     // must be an absolute URL. The previous code stored only the relative
     // path (`/books/<key>/<idx>`), so the button silently did nothing.
+    // The pure-function unit tests above pin the `resolve_chapter_url`
+    // contract; this e2e confirms `detail::parse_manga_detail` actually
+    // calls it with an absolute URL.
     let s = new_source();
     let manga = Manga {
         key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),

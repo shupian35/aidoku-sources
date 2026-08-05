@@ -7,9 +7,8 @@ use aidoku::imports::net::Request;
 use aidoku::register_source;
 use aidoku::{
     AidokuError, BaseUrlProvider, Chapter, DeepLinkHandler, DeepLinkResult, DynamicSettings,
-    FilterValue, HashMap, Home, HomeLayout, ImageRequestProvider, ImageResponse, Listing,
-    ListingProvider, Manga, MangaPageResult, Page, PageContent, PageContext, PageImageProcessor,
-    Result, Source,
+    FilterValue, Home, HomeLayout, ImageRequestProvider, ImageResponse, Listing, ListingProvider,
+    Manga, MangaPageResult, Page, PageContext, PageImageProcessor, Result, Source,
 };
 
 mod chapter;
@@ -20,7 +19,7 @@ mod listing;
 mod source_url;
 mod utils;
 
-use chapter::parse_chapter_pages;
+use chapter::{build_pages, parse_chapter_pages, resolve_chapter_url, truncate_to_page_count};
 use detail::parse_manga_detail;
 use home::parse_home_layout;
 use image::{unscramble_image, unscramble_image_url};
@@ -77,51 +76,13 @@ impl Source for Roumanwu {
             .url
             .clone()
             .unwrap_or_else(|| format!("/books/{}/{}", manga.key, chapter.key));
-        // Chapter.url may be absolute (preferred; Aidoku's "open in browser"
-        // button uses it as-is) or relative (legacy); only prepend the base
-        // for relative paths so we don't end up with `https://xhttps://x/...`.
-        let full = if path.starts_with("http://") || path.starts_with("https://") {
-            path
-        } else {
-            format!("{}{}", get_base_url(), path)
-        };
-        let html = html_get_string(&full)?;
-        let (page_count, mut urls) = parse_chapter_pages(&html)?;
-
-        if page_count > 0 && urls.len() > page_count as usize {
-            urls.truncate(page_count as usize);
-        }
-
-        // Return every URL as PageContent::Url. Previously the parser eagerly
-        // downloaded and unscrambled every sr:1 image before returning, which
-        // serialized tens of large HTTP fetches on the chapter-open thread and
-        // made Aidoku's chapter load dramatically slower than the web reader.
-        // Scrambled URLs are tagged via PageContext so process_page_image can
-        // unscramble them as the app fetches each image lazily.
-        let pages = urls
+        let html = html_get_string(&resolve_chapter_url(&path, &get_base_url()))?;
+        let (page_count, urls) = parse_chapter_pages(&html)?;
+        let tagged = truncate_to_page_count(urls, page_count)
             .into_iter()
-            .map(|u| {
-                if unscramble_image_url(&u) {
-                    let mut ctx: PageContext = HashMap::new();
-                    ctx.insert("scramble".into(), "1".into());
-                    Page {
-                        content: PageContent::url_context(u, ctx),
-                        thumbnail: None,
-                        has_description: false,
-                        description: None,
-                    }
-                } else {
-                    Page {
-                        content: PageContent::url(u),
-                        thumbnail: None,
-                        has_description: false,
-                        description: None,
-                    }
-                }
-            })
+            .map(|u| (u.clone(), unscramble_image_url(&u)))
             .collect();
-
-        Ok(pages)
+        Ok(build_pages(tagged))
     }
 }
 

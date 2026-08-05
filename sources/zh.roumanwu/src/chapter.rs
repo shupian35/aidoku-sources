@@ -5,9 +5,9 @@
 //! JSON-string-escaped; once unescaped and concatenated we look for
 //! `"imageUrl":"..."` pairs and their `"ind":N` indexes, sort by `ind`, and
 //! dedupe.
-
-use aidoku::Result;
-use aidoku::alloc::{String, Vec};
+use aidoku::alloc::string::ToString;
+use aidoku::alloc::{String, Vec, format};
+use aidoku::{HashMap, Page, PageContent, PageContext, Result};
 
 use crate::utils::slice_between;
 
@@ -168,4 +168,60 @@ pub(crate) fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
     }
 
     Ok((page_count, pages))
+}
+/// Resolve a chapter path into an absolute URL.
+///
+/// `path` may already be absolute (preferred — Aidoku's chapter detail
+/// page stores absolute URLs so the "open in browser" button works)
+/// or relative (legacy). Only prepend `base` for relative paths so we
+/// never produce `https://xhttps://x/...`.
+pub(crate) fn resolve_chapter_url(path: &str, base: &str) -> String {
+    if path.starts_with("http://") || path.starts_with("https://") {
+        path.to_string()
+    } else {
+        format!("{}{}", base, path)
+    }
+}
+
+/// Truncate a parsed page URL list to `page_count`.
+///
+/// The RSC payload sometimes embeds imageUrl entries for related-manga
+/// cards alongside real chapter pages; `page_count` (from JSON-LD or a
+/// HTML comment heuristic) trims those off.
+pub(crate) fn truncate_to_page_count(urls: Vec<String>, page_count: i32) -> Vec<String> {
+    if page_count > 0 && urls.len() > page_count as usize {
+        urls[..page_count as usize].to_vec()
+    } else {
+        urls
+    }
+}
+
+/// Build Aidoku `Page` records from a list of `(url, is_scrambled)` pairs.
+///
+/// Caller decides which URLs need unscrambling (rouman5 CDN marks them
+/// `sr:1`). This module knows nothing about that detection — it just
+/// surfaces the tag via `PageContext` so `PageImageProcessor` can
+/// unscramble lazily as each image loads.
+pub(crate) fn build_pages(urls: Vec<(String, bool)>) -> Vec<Page> {
+    urls.into_iter()
+        .map(|(url, scramble)| {
+            if scramble {
+                let mut ctx: PageContext = HashMap::new();
+                ctx.insert("scramble".into(), "1".into());
+                Page {
+                    content: PageContent::url_context(url, ctx),
+                    thumbnail: None,
+                    has_description: false,
+                    description: None,
+                }
+            } else {
+                Page {
+                    content: PageContent::url(url),
+                    thumbnail: None,
+                    has_description: false,
+                    description: None,
+                }
+            }
+        })
+        .collect()
 }
