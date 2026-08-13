@@ -13,20 +13,32 @@ pub(crate) fn unscramble_image_url(url: &str) -> bool {
     url.contains("sr:1")
 }
 
-pub(crate) fn unscramble_image(url: &str, image_data: &[u8]) -> Option<ImageRef> {
+/// Number of row slices a `sr:1` URL was shuffled into.
+///
+/// The slice count is a pure function of the URL: the CDN encodes an S3 key
+/// as base64 in the final path segment, MD5-hashes it, and derives the count
+/// from the hash's last byte (`last_byte % 10 + 5`, i.e. 5..=14).
+pub(crate) fn scramble_slices(url: &str) -> Option<i32> {
     let parts: Vec<&str> = url.split('/').collect();
     let last_part = parts.last()?;
-    let base64_part = last_part.split('.').collect::<Vec<&str>>();
-    let base64_str = &base64_part[..base64_part.len().saturating_sub(1)].join(".");
-
+    let base64_parts: Vec<&str> = last_part.split('.').collect();
+    let base64_str = &base64_parts[..base64_parts.len().saturating_sub(1)].join(".");
     let decoded = base64_decode(base64_str);
     let hash = md5_hash(&decoded);
-    let last_byte = hash[15];
-    let num_slices: i32 = (last_byte as i32 % 10) + 5;
+    Some((hash[15] as i32 % 10) + 5)
+}
 
-    let src_image = ImageRef::new(image_data);
-    let width = src_image.width();
-    let height = src_image.height();
+/// Re-stitch a shuffled `sr:1` page into a correctly-ordered image.
+///
+/// Takes the already-decoded [`ImageRef`] directly so we avoid the
+/// encode-then-decode round-trip that `image.data()` → `ImageRef::new()`
+/// would force: `get_image_data` re-encodes the bitmap only for `new_image`
+/// to decode it straight back. The app hands us a decoded `ImageRef` in
+/// `ImageResponse::image`, so we copy rows straight from it.
+pub(crate) fn unscramble_image(url: &str, src: &ImageRef) -> Option<ImageRef> {
+    let num_slices = scramble_slices(url)?;
+    let width = src.width();
+    let height = src.height();
     if width <= 0.0 || height <= 0.0 {
         return None;
     }
@@ -62,7 +74,7 @@ pub(crate) fn unscramble_image(url: &str, image_data: &[u8]) -> Option<ImageRef>
             width,
             height: h,
         };
-        canvas.copy_image(&src_image, src_rect, dst_rect);
+        canvas.copy_image(src, src_rect, dst_rect);
     }
 
     Some(canvas.get_image())

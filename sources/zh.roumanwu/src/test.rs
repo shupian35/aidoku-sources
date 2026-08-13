@@ -1,4 +1,4 @@
-use aidoku::alloc::{String, Vec};
+use aidoku::alloc::{String, Vec, format, vec};
 use aidoku::{
     ContentRating, DeepLinkHandler, DeepLinkResult, Home, HomeComponentValue, Link, LinkValue,
     Listing, ListingProvider, Manga, MangaPageResult, MangaStatus, Page, PageContent, Source,
@@ -8,6 +8,7 @@ use aidoku_test::aidoku_test;
 
 use super::Roumanwu;
 use crate::chapter::{build_pages, page_count, resolve_chapter_url, truncate_to_page_count};
+use crate::image::{scramble_slices, unscramble_image_url};
 use crate::listing::extract_manga_cards;
 use crate::utils::{json_top_level_object_field, json_top_level_string};
 
@@ -179,6 +180,26 @@ fn build_pages_marks_scrambled_urls_with_context() {
 fn build_pages_handles_empty_input() {
     let pages = build_pages(Vec::new());
     assert!(pages.is_empty());
+}
+
+#[aidoku_test]
+fn scramble_slices_derives_count_from_url() {
+    // Pure function over the URL — no network. The base64 final segment is
+    // an S3 key (`s3://rouman/images/...`); its MD5's last byte (0x35 = 53)
+    // yields 53 % 10 + 5 = 8 slices.
+    let scrambled = "https://r5.rmcdn10.xyz/m/bWYO6lLCSUgUlH3ZcUEfkwofo1hVCAx9RUc_bw0PnRU/wm:0/sr:1/czM6Ly9yb3VtYW4vaW1hZ2VzL2NtNHN4MXpwYTAwMGF2bmwwemlxbmJmeTUvZnJlZXgvNDQ1NDUvMjY5NjI4MS5qcGc.jpg";
+    assert_eq!(scramble_slices(scrambled), Some(8));
+    assert!(
+        unscramble_image_url(scrambled),
+        "sr:1 URL must be marked scrambled"
+    );
+
+    let plain = "https://r5.rmcdn11.xyz/m/uUzbUTZLfXg1oylH22QyIByCcolLMdPtncHSkLuSMMs/wm:2/sr:0/czM6Ly9yb3VtYW4vaW1hZ2VzL2NtNHN4MXpwYTAwMGF2bmwwemlxbmJmeTUvZnJlZXgvNDQ1NDUvMjY5NjI4Mi5qcGc.jpg";
+    assert_eq!(scramble_slices(plain).is_some(), true);
+    assert!(
+        !unscramble_image_url(plain),
+        "sr:0 URL must not be marked scrambled"
+    );
 }
 
 #[aidoku_test]
