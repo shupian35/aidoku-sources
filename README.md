@@ -40,20 +40,25 @@ Commands:
 
 ```
 aidoku-sources/
-├── src/rust/
-│   └── zh.roumanwu/          # 单个源
-│       ├── .cargo/
-│       ├── res/              # 资源文件 (source.json, icon.png)
+├── .github/workflows/
+│   └── build.yaml            # CI：构建所有源、生成 index、部署到 GitHub Pages
+├── sources/
+│   ├── zh.roumanwu/          # 肉漫屋 (rouman5.com)
+│   │   ├── .cargo/config.toml
+│   │   ├── res/              # source.json + 图标
+│   │   ├── src/              # Rust 源码（lib.rs 及多模块）
+│   │   ├── Cargo.toml
+│   │   ├── Cargo.lock
+│   │   ├── rustfmt.toml
+│   │   └── package.aix       # 本地构建产物（勿手动编辑）
+│   └── zh.nnhanman/          # 鸟鸟韩漫 (nnhm7.com)
+│       ├── .cargo/config.toml
+│       ├── res/              # source.json + 图标
 │       ├── src/              # Rust 源码
 │       ├── Cargo.toml
-│       └── build.sh
-├── public/                   # 生成的发布目录
-│   ├── index.json
-│   ├── index.min.json
-│   ├── sources/              # .aix 包
-│   └── icons/                # 源图标
-├── build.ps1                 # Windows 构建脚本
-└── build.sh                  # Linux/Mac 构建脚本
+│       ├── Cargo.lock
+│       └── package.aix       # 本地构建产物（勿手动编辑）
+└── README.md
 ```
 
 ### 构建单个源
@@ -88,7 +93,7 @@ aidoku serve sources/zh.roumanwu/package.aix
 
 ### 添加新源
 
-1. 在 `src/rust/` 下创建新目录，例如 `src/rust/zh.example/`
+1. 在 `sources/` 下创建新目录，例如 `sources/zh.example/`
 2. 运行 `aidoku init` 新建源
 
 ## License
