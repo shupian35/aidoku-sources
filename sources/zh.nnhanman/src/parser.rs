@@ -85,7 +85,28 @@ pub(crate) fn parse_manga_list(html: &str) -> Result<Vec<Manga>> {
 	Ok(entries)
 }
 
+/// Decide whether the browse page has another page of results.
+///
+/// The site renders pagination as a numbered list of `<a href="/comics/.../page/N">`
+/// anchors inside `<div class="pagination-wrap">`. Walking the DOM is more
+/// robust than `html.contains("/page/N+1")`, which would false-positive on
+/// any URL fragment that happens to embed the same substring (ad code, the
+/// pagination shell template, etc.).
 pub(crate) fn has_next_page(html: &str, current_page: i32) -> bool {
-	let next_page_str = format!("/page/{}", current_page + 1);
-	html.contains(&next_page_str)
+	let doc = match Html::parse(html) {
+		Ok(d) => d,
+		Err(_) => return false,
+	};
+	let needle = format!("/page/{}", current_page + 1);
+	let Some(anchors) = doc.select("a") else {
+		return false;
+	};
+	for a in anchors {
+		if let Some(href) = a.attr("href") {
+			if href.contains(&needle) {
+				return true;
+			}
+		}
+	}
+	false
 }

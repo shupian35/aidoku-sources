@@ -3,6 +3,7 @@ use aidoku::{Manga, PageContent, Source};
 use aidoku_test::aidoku_test;
 
 use super::Nnhm7;
+use crate::parser::has_next_page;
 use crate::source_url::{BASE_URL, get_base_url};
 
 fn new_source() -> Nnhm7 {
@@ -169,4 +170,30 @@ fn viewer_is_right_to_left_for_published_manga() {
         aidoku::Viewer::RightToLeft,
         "viewer should be RightToLeft for published manga"
     );
+}
+
+#[aidoku_test]
+fn has_next_page_detects_next_page_anchor() {
+    // The browse page renders pagination as a numbered list of <a> links.
+    // Walking the DOM should pick up the next page from the anchor's href.
+    let html = "
+        <html><body>
+            <div class=\"pagination-wrap\">
+                <ul>
+                    <li class=\"active\"><a href=\"#\">1</a></li>
+                    <li><a href=\"/comics/all/ob/time/st/all/page/2\">2</a></li>
+                </ul>
+            </div>
+        </body></html>
+    ";
+    assert!(has_next_page(html, 1));
+    assert!(!has_next_page(html, 2));
+    assert!(!has_next_page(html, 0));
+}
+
+#[aidoku_test]
+fn has_next_page_is_false_without_pagination_block() {
+    let html = "<html><body><p>only one page of results</p></body></html>";
+    assert!(!has_next_page(html, 0));
+    assert!(!has_next_page(html, 5));
 }
