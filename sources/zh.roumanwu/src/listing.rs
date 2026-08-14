@@ -7,7 +7,7 @@
 //! or a "下一頁" / "Next" marker; that marker only matters for listing pages.
 
 use aidoku::alloc::string::ToString;
-use aidoku::alloc::{String, Vec, format};
+use aidoku::alloc::{String, Vec, format, vec};
 use aidoku::imports::html::Html;
 use aidoku::{ContentRating, Manga, MangaPageResult, Result, Viewer};
 
@@ -57,12 +57,51 @@ pub(crate) fn extract_manga_cards(html: &str) -> Result<Vec<Manga>> {
             .select_first("div[style*=\"background-image\"]")
             .and_then(|d| d.attr("style"))
             .and_then(|s| extract_url_from_style(&s));
+        // Latest chapter ("至: 第N話-..."). Search pages don't carry this
+        // line, so it stays None there.
+        let latest = a.select("div.text-muted-foreground").and_then(|list| {
+            let mut found = None;
+            for e in list {
+                if let Some(t) = e.text() {
+                    let t = t.trim().to_string();
+                    if !t.is_empty() && t.contains("至") {
+                        found = Some(t);
+                        break;
+                    }
+                }
+            }
+            found
+        });
+
+        // Stats row: views, favorites, last-updated (in DOM order). Search
+        // pages only show the date, so require all three before tagging.
+        let stats: Vec<String> = a
+            .select("div.text-xs.text-muted-foreground")
+            .map(|list| {
+                list.into_iter()
+                    .filter_map(|e| e.text())
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty() && !t.contains("至"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let tags: Option<Vec<String>> = if stats.len() >= 3 {
+            Some(vec![
+                format!("浏览 {}", stats[0]),
+                format!("收藏 {}", stats[1]),
+                format!("更新 {}", stats[2]),
+            ])
+        } else {
+            None
+        };
 
         seen.push(key.clone());
         entries.push(Manga {
             key,
             title,
             cover,
+            description: latest,
+            tags,
             url: Some(format!("{}{}", get_base_url(), href)),
             viewer: Viewer::Webtoon,
             content_rating: ContentRating::NSFW,

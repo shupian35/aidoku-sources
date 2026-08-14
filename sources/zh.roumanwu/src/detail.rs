@@ -11,52 +11,27 @@ use aidoku::{Chapter, ContentRating, Manga, MangaStatus, Result, Viewer};
 use crate::source_url::get_base_url;
 use crate::utils::{json_top_level_object_field, json_top_level_string, slice_between};
 
-// "第N話 ..." -> (N, "...") where 第 = U+7B2C, 話 = U+8A71.
-fn extract_chapter_number_and_title(s: &str) -> (f32, String) {
+// Extract the chapter number from a "第N話 ..." title; 第 = U+7B2C.
+// Returns 0.0 when the title has no leading number (e.g. "最終話", "後記").
+fn extract_chapter_number(s: &str) -> f32 {
     let bytes = s.as_bytes();
     let mut i = 0;
-    let mut number: Option<f32> = None;
-    let mut title_start: usize = s.len();
-    let mut title_trimmed: bool = false;
-
-    while i < bytes.len() {
-        if i + 2 < bytes.len() && bytes[i] == 0xE7 && bytes[i + 1] == 0xAC && bytes[i + 2] == 0xAC {
+    while i + 2 < bytes.len() {
+        if bytes[i] == 0xE7 && bytes[i + 1] == 0xAC && bytes[i + 2] == 0xAC {
             let mut j = i + 3;
             let num_start = j;
             while j < bytes.len() && (bytes[j] as char).is_ascii_digit() {
                 j += 1;
             }
             if j > num_start {
-                let num_str: String = s[num_start..j].chars().collect();
-                if let Ok(n) = num_str.parse::<f32>() {
-                    number = Some(n);
-                    if j + 2 < bytes.len()
-                        && bytes[j] == 0xE8
-                        && bytes[j + 1] == 0xA9
-                        && bytes[j + 2] == 0xB1
-                    {
-                        j += 3;
-                    }
-                    title_start = j;
-                    title_trimmed = true;
+                if let Ok(n) = s[num_start..j].parse::<f32>() {
+                    return n;
                 }
             }
         }
         i += 1;
     }
-
-    let mut title: String = s[title_start..].chars().take(200).collect();
-    if title_trimmed {
-        while let Some(first) = title.chars().next() {
-            if matches!(first, ' ' | '-' | ':' | '：' | '~' | '_') {
-                title = title[first.len_utf8()..].to_string();
-            } else {
-                break;
-            }
-        }
-    }
-    let title = title.trim().to_string();
-    (number.unwrap_or(0.0), title)
+    0.0
 }
 
 pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
@@ -132,7 +107,7 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
             }
         };
 
-        let block_start = href_start + end + 1;
+        let block_start = href_start + end + 2;
         let a_close = match html[block_start..].find("</a>") {
             Some(o) => block_start + o,
             None => break,
@@ -146,25 +121,23 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
             String::new()
         };
         let raw_title = raw_title.trim();
-        let (chapter_number, clean_title) = extract_chapter_number_and_title(raw_title);
+        let chapter_number = extract_chapter_number(raw_title);
 
-        // Skip anchors that aren't real chapter list entries. The detail page
-        // also links to `/books/<key>/0` for the "開始閱讀" (start reading)
-        // CTA; its inner div contains "開始閱讀" with no 第N話 prefix, so
-        // `extract_chapter_number_and_title` leaves `chapter_number` at 0.0.
-        // Without this filter the CTA surfaces as a phantom "chapter 0" at
-        // the top of the chapter list.
-        if chapter_number == 0.0 {
-            search_from = a_close + 4;
-            continue;
-        }
+        // Chapters whose title has no number (e.g. "最終話", "後記") fall back
+        // to their URL index so they sort after the numbered chapters instead
+        // of clustering at the top with chapter_number 0.0.
+        let chapter_number = if chapter_number == 0.0 {
+            (index + 1) as f32
+        } else {
+            chapter_number
+        };
 
         chapters.push(Chapter {
             key: index.to_string(),
-            title: if clean_title.is_empty() {
+            title: if raw_title.is_empty() {
                 None
             } else {
-                Some(clean_title)
+                Some(raw_title.to_string())
             },
             chapter_number: Some(chapter_number),
             volume_number: None,

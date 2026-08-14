@@ -68,6 +68,15 @@ pub(crate) fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
                 break;
             }
             let url: String = payload[url_start..url_end].chars().collect();
+            // Skip URLs the streaming RSC payload corrupted. Next.js splits
+            // the payload into chunks by byte size and can cut a URL's JSON
+            // string mid-way (e.g. `"imageUrl":"https"` in one chunk and
+            // `://…jpg"` in the next), leaving empty or truncated values that
+            // would fail to load and abort the whole chapter.
+            if !url.starts_with("http://") && !url.starts_with("https://") {
+                i = url_end + 1;
+                continue;
+            }
             let mut j = url_end;
             let mut ind_val: Option<i32> = None;
             let ind_needle = b"\"ind\":";

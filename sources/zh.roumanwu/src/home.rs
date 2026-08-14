@@ -7,7 +7,7 @@
 //! extraction — the same parser the listing and search pages use.
 
 use aidoku::alloc::{String, Vec, format, vec};
-use aidoku::{HomeComponent, HomeComponentValue, HomeLayout, Link, LinkValue, Result};
+use aidoku::{HomeComponent, HomeComponentValue, HomeLayout, Link, Result};
 
 use crate::listing::extract_manga_cards;
 
@@ -101,15 +101,7 @@ pub(crate) fn parse_home_layout(html: &str) -> Result<HomeLayout> {
         // needs them directly, while Scroller/MangaList wrap each one in a
         // Link so the UI shows titles + cover thumbnails.
         let mangas: Vec<aidoku::Manga> = extract_manga_cards(range)?;
-        let links: Vec<Link> = mangas
-            .iter()
-            .map(|m| Link {
-                title: m.title.clone(),
-                subtitle: None,
-                image_url: m.cover.clone(),
-                value: Some(LinkValue::Manga(m.clone())),
-            })
-            .collect();
+        let links: Vec<Link> = mangas.iter().map(|m| Link::from(m.clone())).collect();
 
         let subtitle = subtitles.first().map(|s| String::from(*s));
         let value = match *kind {

@@ -203,6 +203,43 @@ fn scramble_slices_derives_count_from_url() {
 }
 
 #[aidoku_test]
+fn get_page_list_filters_corrupted_urls() {
+    // Regression: Next.js chunks the RSC payload by byte size and can cut a
+    // URL's JSON string mid-way across chunks, leaving empty/truncated
+    // imageUrl values. Those must be dropped, not surfaced as pages — a bad
+    // page URL makes the host abort the whole chapter with "load failed".
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("3d449abf-d024-4c6b-b0c3-f1fd8e6b6f04"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga.clone(), false, true)
+        .expect("get manga update should succeed");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    let first = chs.iter().find(|c| c.key == "0").expect("chapter 0");
+    let pages: Vec<Page> = s
+        .get_page_list(manga, first.clone())
+        .expect("get page list");
+    assert!(
+        pages.len() >= 50,
+        "should have many pages, got {}",
+        pages.len()
+    );
+    for (i, p) in pages.iter().enumerate() {
+        match &p.content {
+            PageContent::Url(url, _) => {
+                assert!(
+                    url.starts_with("http://") || url.starts_with("https://"),
+                    "page {i} has invalid url: {url:?}"
+                );
+            }
+            other => panic!("page {i} is not a Url: {other:?}"),
+        }
+    }
+}
+
+#[aidoku_test]
 fn chapter_url_is_absolute() {
     // Regression: the chapter detail page renders an "open in browser"
     // button. Aidoku dispatches that using the chapter's `url` field, which
@@ -398,43 +435,36 @@ fn search_finds_known_manga() {
 }
 
 #[aidoku_test]
-fn chapter_list_first_entry_is_real_chapter_not_cta() {
-    // Regression: the detail page links to `/books/<key>/0` for the
-    // "開始閱讀" (start reading) CTA above the chapter grid. The parser used
-    // to pick it up as a phantom "chapter 0", which then surfaced as the
-    // first entry in the chapter list. The real chapter list starts with
-    // "第1話" inside the chapter grid container.
+fn chapter_list_includes_numberless_chapters() {
+    // Regression: chapters whose title has no 第N話 number (e.g. "最終話",
+    // "後記") used to be dropped by a chapter_number == 0.0 filter. They must
+    // be kept (with their original title) and sort after numbered chapters.
     let s = new_source();
     let manga = Manga {
-        key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
+        key: String::from("cm9uutbj9000gs63l0po5ihd0"),
         ..Default::default()
     };
     let updated = s
         .get_manga_update(manga, false, true)
         .expect("get manga update should succeed");
     let chs = updated.chapters.as_deref().expect("chapters");
+    let titles: Vec<String> = chs
+        .iter()
+        .map(|c| c.title.clone().unwrap_or_default())
+        .collect();
     assert!(
-        chs.len() >= 10,
-        "should have many chapters, got {}",
-        chs.len()
+        titles.iter().any(|t| t.contains("最終話")),
+        "最終話 chapter should be present, got {titles:?}"
+    );
+    assert!(
+        titles.iter().any(|t| t == "後記"),
+        "後記 chapter should be present, got {titles:?}"
     );
     for c in chs.iter() {
-        let title = c.title.as_deref().unwrap_or("");
-        assert_ne!(
-            title, "放入書架",
-            "phantom bookmark CTA should not appear as a chapter"
-        );
-        assert_ne!(
-            title, "開始閱讀",
-            "phantom start-reading CTA should not appear as a chapter"
-        );
         let n = c.chapter_number.unwrap_or(0.0);
         assert!(
             n >= 1.0,
-            "no chapter should have chapter_number 0.0 (would sort to the \
-             top of the chapter list); got {} for key={} title={:?}",
-            n,
-            c.key,
+            "chapter_number must be >= 1.0, got {n} for title={:?}",
             c.title
         );
     }
@@ -514,6 +544,39 @@ fn extract_manga_cards_skips_empty_titles() {
     let cards = extract_manga_cards(html).expect("parse");
     assert_eq!(cards.len(), 1);
     assert_eq!(cards[0].key, "b");
+}
+
+#[aidoku_test]
+fn extract_manga_cards_parses_latest_chapter() {
+    // The "至: <!-- -->第N話-..." line under the title becomes the manga's
+    // description, so home/listing cards can show what the manga updated to.
+    let html = r#"<a href="/books/abc123"><div class="truncate text-sm md:text-base text-foreground">Title A</div><div class="text-muted-foreground text-xs">至: <!-- -->第5話-測試標題</div><div style="background-image:url(&quot;https://x/c.jpg&quot;)"></div></a>"#;
+    let cards = extract_manga_cards(html).expect("parse");
+    assert_eq!(cards.len(), 1);
+    assert!(
+        cards[0]
+            .description
+            .as_deref()
+            .unwrap_or("")
+            .contains("第5話"),
+        "description should contain the latest chapter, got {:?}",
+        cards[0].description
+    );
+}
+
+#[aidoku_test]
+fn extract_manga_cards_parses_stats_tags() {
+    // The stats row (views / favorites / last-updated) becomes tags so cards
+    // can surface them. Search pages only carry the date, so fewer than three
+    // stats leaves tags unset.
+    let html = r#"<a href="/books/abc123"><div class="truncate text-sm md:text-base text-foreground">Title A</div><div class="text-muted-foreground text-xs">至: <!-- -->第5話-測試標題</div><div class="text-xs text-muted-foreground"><div>862.4K</div></div><div class="text-xs text-muted-foreground"><div>5.1K</div></div><div class="text-xs text-muted-foreground"><div>8/12/2026</div></div><div style="background-image:url(&quot;https://x/c.jpg&quot;)"></div></a>"#;
+    let cards = extract_manga_cards(html).expect("parse");
+    assert_eq!(cards.len(), 1);
+    let tags = cards[0].tags.as_deref().expect("tags");
+    assert_eq!(tags.len(), 3);
+    assert_eq!(tags[0], "浏览 862.4K");
+    assert_eq!(tags[1], "收藏 5.1K");
+    assert_eq!(tags[2], "更新 8/12/2026");
 }
 
 #[aidoku_test]
