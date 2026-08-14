@@ -436,8 +436,9 @@ fn search_finds_known_manga() {
 
 #[aidoku_test]
 fn chapter_list_includes_numberless_chapters() {
-    // Chapters are listed in the same order as the site (index ascending):
-    // "第1話" first, "最終話" / "後記" last, each keeping its original title.
+    // Chapters are listed newest-first: "最終話" / "後記" first, "第1話"
+    // last, each keeping its original title. The "開始閱讀" button above
+    // the grid is dropped.
     let s = new_source();
     let manga = Manga {
         key: String::from("cm9uutbj9000gs63l0po5ihd0"),
@@ -459,12 +460,16 @@ fn chapter_list_includes_numberless_chapters() {
         titles.iter().any(|t| t == "後記"),
         "後記 chapter should be present, got {titles:?}"
     );
-    // Order matches the site: 第1話 before 後記 (no reverse).
+    assert!(
+        !titles.iter().any(|t| t == "開始閱讀" || t == "开始阅读"),
+        "start-reading CTA must not appear, got {titles:?}"
+    );
+    // Newest first: 後記 before 第1話.
     let first = titles.iter().position(|t| t.contains("第1話"));
     let last = titles.iter().position(|t| t == "後記");
     assert!(
-        matches!((first, last), (Some(f), Some(l)) if f < l),
-        "第1話 should appear before 後記, got {titles:?}"
+        matches!((first, last), (Some(f), Some(l)) if l < f),
+        "後記 should appear before 第1話, got {titles:?}"
     );
     for c in chs.iter() {
         let n = c.chapter_number.unwrap_or(0.0);
@@ -474,6 +479,72 @@ fn chapter_list_includes_numberless_chapters() {
             c.title
         );
     }
+}
+
+#[aidoku_test]
+fn chapter_list_matches_site_grid() {
+    // The grid holds 第1話..第39話; they are returned newest-first. The
+    // 開始閱讀 button above the grid must not leak into the chapter list.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("cmjuau8r3000hs6i94s7qug06"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga, false, true)
+        .expect("get manga update should succeed");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    assert_eq!(chs.len(), 39, "should be 39 chapters, got {}", chs.len());
+    let first = chs
+        .first()
+        .and_then(|c| c.title.clone())
+        .unwrap_or_default();
+    let last = chs.last().and_then(|c| c.title.clone()).unwrap_or_default();
+    assert!(
+        first.contains("第39話"),
+        "first should be 第39話 (newest first), got {first:?}"
+    );
+    assert!(last.contains("第1話"), "last should be 第1話, got {last:?}");
+    for c in chs {
+        assert_ne!(c.title.as_deref().unwrap_or(""), "開始閱讀");
+    }
+}
+
+#[aidoku_test]
+fn chapter_list_keeps_announcements() {
+    // The site's chapter grid also contains non-chapter entries (休刊公告,
+    // 登場人物MBTI, 第4季預告, 後記). Keep them all so the list matches the
+    // site; only the 開始閱讀 button above the grid is dropped.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("e1a23182-bb48-4215-b301-5ebfe9edc9b4"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga, false, true)
+        .expect("get manga update should succeed");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    assert_eq!(chs.len(), 166, "should be 166 entries, got {}", chs.len());
+    let titles: Vec<String> = chs
+        .iter()
+        .map(|c| c.title.clone().unwrap_or_default())
+        .collect();
+    for needle in ["休刊一周公告", "登場人物MBTI", "第4季預告", "後記"] {
+        assert!(
+            titles.iter().any(|t| t == needle),
+            "{needle} should be present"
+        );
+    }
+    assert!(
+        !titles.iter().any(|t| t == "開始閱讀"),
+        "start-reading CTA must not appear"
+    );
+    assert_eq!(titles.first().unwrap(), "後記");
+    assert!(
+        titles.last().unwrap().contains("第1話"),
+        "last should be 第1話 (newest first), got {:?}",
+        titles.last()
+    );
 }
 
 #[aidoku_test]

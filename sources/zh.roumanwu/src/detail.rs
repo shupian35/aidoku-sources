@@ -6,6 +6,7 @@
 
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format, vec};
+use aidoku::imports::html::Html;
 use aidoku::{Chapter, ContentRating, Manga, MangaStatus, Result, Viewer};
 
 use crate::source_url::get_base_url;
@@ -61,64 +62,49 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
         }
     }
 
-    let mut chapters: Vec<Chapter> = Vec::new();
-    let needle = format!("href=\"/books/{}/", key);
-    let mut search_from = 0;
-    while let Some(rel) = html[search_from..].find(&needle) {
-        let abs = search_from + rel;
-        let href_start = abs + needle.len();
-        let rest = &html[href_start..];
-        let mut end = 0;
-        while end < rest.len() && rest.as_bytes()[end] != b'"' {
-            end += 1;
-        }
-        if end == 0 {
-            break;
-        }
-        let index_str = &rest[..end];
-        let index: i32 = match index_str.parse() {
-            Ok(n) => n,
-            Err(_) => {
-                search_from = href_start + end + 1;
-                continue;
-            }
-        };
-
-        let block_start = href_start + end + 2;
-        let a_close = match html[block_start..].find("</a>") {
-            Some(o) => block_start + o,
-            None => break,
-        };
-        let block = &html[block_start..a_close];
-        let div_open = block.find('>').map(|i| i + 1).unwrap_or(0);
-        let div_close = block.rfind("</div>").unwrap_or(block.len());
-        let raw_title: String = if div_open < div_close {
-            block[div_open..div_close].chars().take(200).collect()
-        } else {
-            String::new()
-        };
-        let raw_title = raw_title.trim();
-        let chapter_number = (index + 1) as f32;
-
-        chapters.push(Chapter {
-            key: index.to_string(),
-            title: if raw_title.is_empty() {
-                None
-            } else {
-                Some(raw_title.to_string())
-            },
-            chapter_number: Some(chapter_number),
-            volume_number: None,
-            date_uploaded: None,
-            scanlators: None,
-            url: Some(format!("{}/books/{}/{}", get_base_url(), key, index)),
-            language: Some("zh".to_string()),
-            thumbnail: None,
-            locked: false,
-        });
-
-        search_from = a_close + 4;
-    }
+    // Chapters live inside the site's chapter grid; selecting the grid by
+    // its exact class excludes the "開始閱讀" button and related-manga links
+    // that appear outside it, so no extra filtering is needed.
+    let mut chapters: Vec<Chapter> = {
+        let doc = Html::parse(html)?;
+        let anchor_sel = format!("a[href^=\"/books/{}/\"]", key);
+        doc.select_first(
+            "div[class=\"grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 px-2 py-4\"]",
+        )
+        .and_then(|grid| grid.select(anchor_sel.as_str()))
+        .map(|anchors| {
+            anchors
+                .map(|a| {
+                    let href = a.attr("href").unwrap_or_default();
+                    let index: i32 = href
+                        .rsplit('/')
+                        .next()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    let title = a
+                        .text()
+                        .map(|t| t.trim().to_string())
+                        .filter(|t| !t.is_empty());
+                    Chapter {
+                        key: index.to_string(),
+                        title,
+                        chapter_number: Some((index + 1) as f32),
+                        volume_number: None,
+                        date_uploaded: None,
+                        scanlators: None,
+                        url: Some(format!("{}/books/{}/{}", get_base_url(), key, index)),
+                        language: Some("zh".to_string()),
+                        thumbnail: None,
+                        locked: false,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+    };
+    // Newest first: the site grid is oldest-first, readers expect the
+    // latest chapter at the top.
+    chapters.reverse();
 
     let url = Some(format!("{}/books/{}", get_base_url(), key));
     Ok(Manga {
