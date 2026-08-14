@@ -4,9 +4,9 @@
     {
       "id": "zh.nnhanman",
       "name": "鸟鸟韩漫",
-      "version": 10,
-      "iconURL": "icons/zh.nnhanman-v10.png",
-      "downloadURL": "sources/zh.nnhanman-v10.aix",
+      "version": 11,
+      "iconURL": "icons/zh.nnhanman-v11.png",
+      "downloadURL": "sources/zh.nnhanman-v11.aix",
       "languages": [
         "zh"
       ],
