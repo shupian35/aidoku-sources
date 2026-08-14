@@ -24,7 +24,7 @@
 
 ### aidoku-cli 命令
 
-```
+```bash
 Usage: aidoku <COMMAND>
 
 Commands:
