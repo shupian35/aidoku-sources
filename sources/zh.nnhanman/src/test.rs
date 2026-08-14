@@ -114,9 +114,13 @@ fn viewer_is_right_to_left_for_3d_manga() {
 }
 
 #[aidoku_test]
-fn page_list_returns_nnpic_image_urls() {
-    // get_page_list must surface every chapter page as a URL pointing at
-    // the nnpic.xyz CDN. The host then fetches each image lazily through
+fn page_list_returns_chapter_image_urls() {
+    // The site serves chapter pages on either of two CDNs depending on when
+    // the chapter was uploaded: older ones live on `img.nnpic.xyz`, newer
+    // ones on `new.niaopic.com`. Both share the chapter-page shape
+    // (`<img data-index>` with a `data-src` URL), so get_page_list must
+    // surface the `data-src` regardless of which CDN the chapter lands on.
+    // The host then fetches each image lazily through
     // ImageRequestProvider::get_image_request, which injects Referer +
     // User-Agent so the CDN doesn't route the request to a slow edge.
     let s = new_source();
@@ -137,19 +141,53 @@ fn page_list_returns_nnpic_image_urls() {
         "should have many pages, got {}",
         pages.len()
     );
-    for p in &pages {
+    for (i, p) in pages.iter().enumerate() {
         match &p.content {
             PageContent::Url(url, _) => {
                 assert!(
                     url.starts_with("http://") || url.starts_with("https://"),
-                    "image url must be absolute, got {url}"
+                    "page {i} url must be absolute, got {url}"
                 );
                 assert!(
-                    url.contains("nnpic.xyz"),
-                    "image url must point at the nnpic CDN, got {url}"
+                    url.contains("nnpic.xyz") || url.contains("niaopic.com"),
+                    "page {i} url must point at a known CDN, got {url}"
                 );
             }
-            other => panic!("page must be a URL, got {other:?}"),
+            other => panic!("page {i} must be a URL, got {other:?}"),
+        }
+    }
+}
+
+#[aidoku_test]
+fn page_list_returns_newer_chapter_image_urls() {
+    // Regression: the site migrated some chapters to a new CDN
+    // (`new.niaopic.com`) whose URLs do not contain `nnpic.xyz`. Earlier
+    // get_page_list filtered those URLs out, so a chapter load on a newer
+    // title silently returned zero pages.
+    let s = new_source();
+    let manga = Manga {
+        key: String::from("ren-qi-hui-chun-guan"),
+        ..Default::default()
+    };
+    let updated = s
+        .get_manga_update(manga.clone(), false, true)
+        .expect("get manga update");
+    let chs = updated.chapters.as_deref().expect("chapters");
+    let first = chs.first().expect("at least one chapter");
+    let pages = s
+        .get_page_list(manga, first.clone())
+        .expect("get page list");
+    assert!(
+        !pages.is_empty(),
+        "latest chapter must surface at least one image URL, got 0"
+    );
+    for (i, p) in pages.iter().enumerate() {
+        match &p.content {
+            PageContent::Url(url, _) => assert!(
+                url.starts_with("https://"),
+                "page {i} url must be absolute https, got {url}"
+            ),
+            other => panic!("page {i} must be a URL, got {other:?}"),
         }
     }
 }

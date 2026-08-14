@@ -266,10 +266,16 @@ impl Source for Nnhm7 {
 		let html = html_get_string(&full_url)?;
 		let doc = Html::parse(&html)?;
 		let mut pages = Vec::new();
+		// The site serves chapter pages on either of two CDNs depending on
+		// when the chapter was uploaded — older chapters live on
+		// `img.nnpic.xyz`, newer ones have moved to `new.niaopic.com` (the
+		// same operator's other brand). Both ship images via `data-src` on
+		// `<img data-index>`, so the `img[data-index]` selector is enough to
+		// isolate chapter pages — accept whichever CDN the chapter lands on.
 		if let Some(img_els) = doc.select("img[data-index]") {
 			for img in img_els {
 				if let Some(src) = img.attr("data-src").or_else(|| img.attr("src")) {
-					if src.contains("nnpic.xyz") {
+					if src.starts_with("http://") || src.starts_with("https://") {
 						pages.push(Page {
 							content: PageContent::url(src.to_string()),
 							..Default::default()
