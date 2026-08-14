@@ -436,9 +436,8 @@ fn search_finds_known_manga() {
 
 #[aidoku_test]
 fn chapter_list_includes_numberless_chapters() {
-    // Regression: chapters whose title has no 第N話 number (e.g. "最終話",
-    // "後記") used to be dropped by a chapter_number == 0.0 filter. They must
-    // be kept (with their original title) and sort after numbered chapters.
+    // Chapters are listed in the same order as the site (index ascending):
+    // "第1話" first, "最終話" / "後記" last, each keeping its original title.
     let s = new_source();
     let manga = Manga {
         key: String::from("cm9uutbj9000gs63l0po5ihd0"),
@@ -459,6 +458,13 @@ fn chapter_list_includes_numberless_chapters() {
     assert!(
         titles.iter().any(|t| t == "後記"),
         "後記 chapter should be present, got {titles:?}"
+    );
+    // Order matches the site: 第1話 before 後記 (no reverse).
+    let first = titles.iter().position(|t| t.contains("第1話"));
+    let last = titles.iter().position(|t| t == "後記");
+    assert!(
+        matches!((first, last), (Some(f), Some(l)) if f < l),
+        "第1話 should appear before 後記, got {titles:?}"
     );
     for c in chs.iter() {
         let n = c.chapter_number.unwrap_or(0.0);

@@ -11,29 +11,6 @@ use aidoku::{Chapter, ContentRating, Manga, MangaStatus, Result, Viewer};
 use crate::source_url::get_base_url;
 use crate::utils::{json_top_level_object_field, json_top_level_string, slice_between};
 
-// Extract the chapter number from a "第N話 ..." title; 第 = U+7B2C.
-// Returns 0.0 when the title has no leading number (e.g. "最終話", "後記").
-fn extract_chapter_number(s: &str) -> f32 {
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i + 2 < bytes.len() {
-        if bytes[i] == 0xE7 && bytes[i + 1] == 0xAC && bytes[i + 2] == 0xAC {
-            let mut j = i + 3;
-            let num_start = j;
-            while j < bytes.len() && (bytes[j] as char).is_ascii_digit() {
-                j += 1;
-            }
-            if j > num_start {
-                if let Ok(n) = s[num_start..j].parse::<f32>() {
-                    return n;
-                }
-            }
-        }
-        i += 1;
-    }
-    0.0
-}
-
 pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
     let json_ld_raw =
         slice_between(html, "<script type=\"application/ld+json\">", "</script>").unwrap_or("");
@@ -121,16 +98,7 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
             String::new()
         };
         let raw_title = raw_title.trim();
-        let chapter_number = extract_chapter_number(raw_title);
-
-        // Chapters whose title has no number (e.g. "最終話", "後記") fall back
-        // to their URL index so they sort after the numbered chapters instead
-        // of clustering at the top with chapter_number 0.0.
-        let chapter_number = if chapter_number == 0.0 {
-            (index + 1) as f32
-        } else {
-            chapter_number
-        };
+        let chapter_number = (index + 1) as f32;
 
         chapters.push(Chapter {
             key: index.to_string(),
@@ -151,7 +119,6 @@ pub(crate) fn parse_manga_detail(html: &str, key: &str) -> Result<Manga> {
 
         search_from = a_close + 4;
     }
-    chapters.reverse();
 
     let url = Some(format!("{}/books/{}", get_base_url(), key));
     Ok(Manga {
