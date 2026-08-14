@@ -1,124 +1,58 @@
 //! Chapter page parsing.
 //!
-//! Chapter HTML on rouman5.com embeds the page list inside Next.js streaming
-//! payload chunks (`<script>self.__next_f.push([1,"..."])`). Each chunk is
-//! JSON-string-escaped; once unescaped and concatenated we look for
-//! `"imageUrl":"..."` pairs and their `"ind":N` indexes, sort by `ind`, and
-//! dedupe.
+//! Chapter HTML on rouman5.com carries the page list in two places:
+//!
+//! 1. A small `<div class="text-muted-foreground text-right mr-4">N頁</div>`
+//!    widget above the image grid, which directly states the page count.
+//! 2. The Next.js RSC streaming payload, shipped as a series of
+//!    `<script>self.__next_f.push([1,"…"])</script>` chunks. Once
+//!    unescaped and concatenated, the payload contains `"imageUrl":"…"`
+//!    / `"ind":N` pairs that list every page.
+//!
+//! The page count is fetched from (1); the page list is reassembled from (2).
+
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format};
+use aidoku::imports::html::Html;
 use aidoku::{HashMap, Page, PageContent, PageContext, Result};
 
-use crate::utils::slice_between;
-
 pub(crate) fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
-    let mut payload = String::with_capacity(html.len());
-    let marker = "<script>self.__next_f.push([1,\"";
-    let mut cursor = 0;
-    while let Some(rel) = html[cursor..].find(marker) {
-        let abs = cursor + rel;
-        let after = &html[abs + marker.len()..];
-        let end_marker = "])</script>";
-        if let Some(close_rel) = after.find(end_marker) {
-            let chunk_bytes = after[..close_rel].as_bytes();
-            let mut unescaped = String::with_capacity(chunk_bytes.len());
-            let mut k = 0;
-            while k < chunk_bytes.len() {
-                if chunk_bytes[k] == b'\\' && k + 1 < chunk_bytes.len() {
-                    let n = chunk_bytes[k + 1];
-                    match n {
-                        b'"' => unescaped.push('"'),
-                        b'\\' => unescaped.push('\\'),
-                        b'n' => unescaped.push('\n'),
-                        b'r' => unescaped.push('\r'),
-                        _ => {
-                            unescaped.push(chunk_bytes[k] as char);
-                            unescaped.push(n as char);
-                        }
-                    }
-                    k += 2;
-                } else {
-                    unescaped.push(chunk_bytes[k] as char);
-                    k += 1;
-                }
-            }
-            payload.push_str(&unescaped);
-            cursor = abs + marker.len() + close_rel + end_marker.len();
-        } else {
-            break;
-        }
-    }
+    let doc = Html::parse(html)?;
 
-    // Determine page count via the prioritized heuristic chain.
-    // None means no heuristic matched; caller treats that as 0 to
-    // preserve prior behaviour.
-    let page_count: i32 = page_count(html, &payload).unwrap_or(0);
-    // Extract (imageUrl, ind) pairs from the concatenated payload
-    let mut entries: Vec<(i32, String)> = Vec::new();
-    let bytes = payload.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if i + 12 < bytes.len() && &bytes[i..i + 12] == b"\"imageUrl\":\"" {
-            let url_start = i + 12;
-            let mut url_end = url_start;
-            while url_end < bytes.len() && bytes[url_end] != b'"' {
-                url_end += 1;
-            }
-            if url_end >= bytes.len() {
-                break;
-            }
-            let url: String = payload[url_start..url_end].chars().collect();
-            // Skip URLs the streaming RSC payload corrupted. Next.js splits
-            // the payload into chunks by byte size and can cut a URL's JSON
-            // string mid-way (e.g. `"imageUrl":"https"` in one chunk and
-            // `://…jpg"` in the next), leaving empty or truncated values that
-            // would fail to load and abort the whole chapter.
-            if !url.starts_with("http://") && !url.starts_with("https://") {
-                i = url_end + 1;
+    let page_count = page_count_from_dom(&doc).unwrap_or(0);
+
+    // The RSC payload lives in <script>self.__next_f.push([1,"…"])</script>
+    // chunks. Iterate every <script>, grab its body, and accumulate the
+    // chunks whose body starts with the Next.js marker. Strings inside the
+    // chunks are JSON-escaped ("\"", "\\", "\n", …), so we unescape them as
+    // we concatenate so the downstream imageUrl/ind scan sees clean JSON.
+    let mut payload = String::new();
+    if let Some(scripts) = doc.select("script") {
+        for script in scripts {
+            // SwiftSoup stores <script> bodies as a DataNode sibling, not the
+            // element's text. `Element::data()` returns None for them in the
+            // aidoku binding, but `Element::html()` returns the inner HTML —
+            // which for a <script> is the script body verbatim.
+            let data = match script.html() {
+                Some(d) => d,
+                None => continue,
+            };
+            if !data.starts_with("self.__next_f.push") {
                 continue;
             }
-            let mut j = url_end;
-            let mut ind_val: Option<i32> = None;
-            let ind_needle = b"\"ind\":";
-            let scan_end = core::cmp::min(bytes.len(), url_end + 400);
-            while j < scan_end {
-                if j + ind_needle.len() < bytes.len()
-                    && &bytes[j..j + ind_needle.len()] == ind_needle
-                {
-                    let mut k = j + ind_needle.len();
-                    let n_start = k;
-                    while k < bytes.len() && (bytes[k] as char).is_ascii_digit() {
-                        k += 1;
-                    }
-                    if k > n_start {
-                        let num: String = payload[n_start..k].chars().collect();
-                        if let Ok(n) = num.parse::<i32>() {
-                            ind_val = Some(n);
-                        }
-                    }
-                    break;
-                }
-                j += 1;
-            }
-            if let Some(n) = ind_val {
-                entries.push((n, url));
-            }
-            i = url_end + 1;
-        } else {
-            i += 1;
+            let inner = match extract_rsc_chunk(&data) {
+                Some(s) => s,
+                None => continue,
+            };
+            unescape_json_string_into(&inner, &mut payload);
         }
     }
 
-    entries.sort_by_key(|(n, _)| *n);
-    let mut pages: Vec<String> = Vec::with_capacity(entries.len());
-    for (_, url) in entries {
-        if !pages.contains(&url) {
-            pages.push(url);
-        }
-    }
-
-    Ok((page_count, pages))
+    // Extract (imageUrl, ind) pairs from the concatenated payload.
+    let entries = extract_image_url_ind_pairs(&payload);
+    Ok((page_count, dedup_preserving_order(entries, page_count)))
 }
+
 /// Resolve a chapter path into an absolute URL.
 ///
 /// `path` may already be absolute (preferred — Aidoku's chapter detail
@@ -136,8 +70,8 @@ pub(crate) fn resolve_chapter_url(path: &str, base: &str) -> String {
 /// Truncate a parsed page URL list to `page_count`.
 ///
 /// The RSC payload sometimes embeds imageUrl entries for related-manga
-/// cards alongside real chapter pages; `page_count` (from JSON-LD or a
-/// HTML comment heuristic) trims those off.
+/// cards alongside real chapter pages; `page_count` (from the page widget)
+/// trims those off.
 pub(crate) fn truncate_to_page_count(urls: Vec<String>, page_count: i32) -> Vec<String> {
     if page_count > 0 && urls.len() > page_count as usize {
         urls[..page_count as usize].to_vec()
@@ -176,99 +110,151 @@ pub(crate) fn build_pages(urls: Vec<(String, bool)>) -> Vec<Page> {
         .collect()
 }
 
-// ---------- Page-count heuristics ----------
-
-/// Site-specific way of extracting the page count from a chapter HTML.
-///
-/// Each variant owns one encoding the CDN ships (JSON-LD schema, HTML
-/// comment split, React Server Components payload). The chain walks them in
-/// priority order and returns the first match.
-enum PageCountHeuristic {
-    JsonLd,
-    HtmlComment,
-    RscPayload,
-}
-
-impl PageCountHeuristic {
-    fn run(&self, html: &str, payload: &str) -> Option<i32> {
-        match self {
-            Self::JsonLd => json_ld_count(html),
-            Self::HtmlComment => html_comment_count(html),
-            Self::RscPayload => rsc_payload_count(payload),
+/// Page count is exposed by the site as `<div … text-right mr-4>1/N頁</div>`.
+/// Re-read it through the HTML parser; SwiftSoup's `.text()` collapses the
+/// surrounding `<!-- -->` comments that split the digits in the rendered DOM.
+pub(crate) fn page_count_from_dom(doc: &aidoku::imports::html::Document) -> Option<i32> {
+    let el = doc.select_first("div.text-muted-foreground.text-right.mr-4")?;
+    let text = el.text()?;
+    let mut current = String::new();
+    let mut last = None;
+    for c in text.chars() {
+        if c.is_ascii_digit() {
+            current.push(c);
+        } else if !current.is_empty() {
+            last = current.parse::<i32>().ok();
+            current.clear();
         }
     }
-}
-
-const PAGE_COUNT_CHAIN: &[PageCountHeuristic] = &[
-    PageCountHeuristic::JsonLd,
-    PageCountHeuristic::HtmlComment,
-    PageCountHeuristic::RscPayload,
-];
-
-/// Walk the page-count heuristic chain and return the first match.
-///
-/// Returns `None` when no heuristic extracts a count. Callers decide how to
-/// interpret "unknown" — `parse_chapter_pages` falls back to `0`.
-pub(crate) fn page_count(html: &str, payload: &str) -> Option<i32> {
-    PAGE_COUNT_CHAIN.iter().find_map(|h| h.run(html, payload))
-}
-
-fn json_ld_count(html: &str) -> Option<i32> {
-    let json_ld_raw = slice_between(html, "<script type=\"application/ld+json\">", "</script>")
-        .unwrap_or("")
-        .replace("&quot;", "\"")
-        .replace("&amp;", "&");
-    let needle = "numberOfPages";
-    let i = json_ld_raw.find(needle)?;
-    let after = &json_ld_raw[i + needle.len()..];
-    let mut s = 0;
-    while s < after.len() && (after.as_bytes()[s] == b':' || after.as_bytes()[s] == b' ') {
-        s += 1;
+    if !current.is_empty() {
+        last = current.parse::<i32>().ok();
     }
-    let digits: String = after[s..]
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-    digits.parse().ok()
+    last
 }
 
-fn html_comment_count(html: &str) -> Option<i32> {
+/// Strip the `self.__next_f.push([1,"…"])` wrapper from a single RSC chunk
+/// (the data we already filtered to start with the marker), returning the
+/// inner JSON-escaped string.
+fn extract_rsc_chunk(data: &str) -> Option<&str> {
+    const OPEN: &str = "self.__next_f.push([1,\"";
+    const CLOSE: &str = "\"])";
+    let start = data.find(OPEN)? + OPEN.len();
+    // Some chunks wrap the call as [1,"…"]; others reuse a numeric chunk id
+    // (e.g. [3,"…"]). Strip from the first opening quote after the marker so
+    // chunk variants share one extractor.
+    let rest = &data[start..];
+    let end_rel = rest.rfind(CLOSE)?;
+    Some(&rest[..end_rel])
+}
+
+/// Append the unescaped JSON string contents of `inner` to `out`. Handles
+/// `\"`, `\\`, `\n`, `\r`, `\t`, `\/`, and `\uXXXX`. Anything else is
+/// preserved verbatim so unexpected escapes don't truncate the payload.
+fn unescape_json_string_into(inner: &str, out: &mut String) {
+    let bytes = inner.as_bytes();
     let mut i = 0;
-    while let Some(rel) = html[i..].find("<!-- -->/<!-- -->") {
-        let abs = i + rel;
-        let after = &html[abs + 18..];
-        let head: String = after.chars().take(40).collect();
-        let after_digits: String = head.chars().skip_while(|c| c.is_ascii_digit()).collect();
-        if let Some(d_end) = after_digits.find("<!-- -->頁") {
-            let digits: String = after_digits[..d_end]
-                .chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect();
-            if let Ok(n) = digits.parse::<i32>() {
-                return Some(n);
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            match bytes[i + 1] {
+                b'"' => out.push('"'),
+                b'\\' => out.push('\\'),
+                b'n' => out.push('\n'),
+                b'r' => out.push('\r'),
+                b't' => out.push('\t'),
+                b'/' => out.push('/'),
+                b'u' => {
+                    if i + 5 < bytes.len() {
+                        let hex = &inner[i + 2..i + 6];
+                        if let Ok(code) = u32::from_str_radix(hex, 16) {
+                            if let Some(c) = char::from_u32(code) {
+                                out.push(c);
+                            }
+                        }
+                        i += 4;
+                    }
+                }
+                _ => out.push(bytes[i + 1] as char),
             }
+            i += 2;
+        } else {
+            out.push(bytes[i] as char);
+            i += 1;
         }
-        i = abs + 1;
     }
-    None
 }
 
-fn rsc_payload_count(payload: &str) -> Option<i32> {
+/// Scan the unescaped RSC payload for `"imageUrl":"…"` / `"ind":N` pairs.
+/// Returns pages in source order (the `ind` ordering); the caller is
+/// responsible for de-duping and clamping to `page_count`.
+fn extract_image_url_ind_pairs(payload: &str) -> Vec<(i32, String)> {
+    let bytes = payload.as_bytes();
+    let needle = b"\"imageUrl\":\"";
+    let needle_ind = b"\"ind\":";
+    let mut entries: Vec<(i32, String)> = Vec::new();
     let mut i = 0;
-    while let Some(rel) = payload[i..].find("\"/\",") {
-        let abs = i + rel;
-        let after = &payload[abs + 4..];
-        let head: String = after.chars().take(60).collect();
-        if let Some(d_end) = head.find("\",\"頁\"") {
-            let digits: String = head[..d_end]
-                .chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect();
-            if let Ok(n) = digits.parse::<i32>() {
-                return Some(n);
-            }
+    while i + needle.len() < bytes.len() {
+        if &bytes[i..i + needle.len()] != needle {
+            i += 1;
+            continue;
         }
-        i = abs + 1;
+        let url_start = i + needle.len();
+        let mut url_end = url_start;
+        while url_end < bytes.len() && bytes[url_end] != b'"' {
+            url_end += 1;
+        }
+        if url_end >= bytes.len() {
+            break;
+        }
+        let url: String = payload[url_start..url_end].chars().collect();
+        // Next.js byte-chunks the RSC payload and can split a URL's JSON
+        // string mid-way (e.g. `"imageUrl":"https"` in one chunk and
+        // `://…jpg"` in the next), leaving empty/truncated values that would
+        // fail to load and abort the whole chapter.
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            i = url_end + 1;
+            continue;
+        }
+        // The matching `"ind":N` lives within the next few hundred bytes.
+        let scan_end = core::cmp::min(bytes.len(), url_end + 400);
+        let mut j = url_end;
+        let mut ind_val: Option<i32> = None;
+        while j + needle_ind.len() < scan_end {
+            if &bytes[j..j + needle_ind.len()] == needle_ind {
+                let mut k = j + needle_ind.len();
+                let n_start = k;
+                while k < scan_end && (bytes[k] as char).is_ascii_digit() {
+                    k += 1;
+                }
+                if k > n_start {
+                    let num: String = payload[n_start..k].chars().collect();
+                    if let Ok(n) = num.parse::<i32>() {
+                        ind_val = Some(n);
+                    }
+                }
+                break;
+            }
+            j += 1;
+        }
+        if let Some(n) = ind_val {
+            entries.push((n, url));
+        }
+        i = url_end + 1;
     }
-    None
+    entries.sort_by_key(|(n, _)| *n);
+    entries
+}
+
+/// Sort by `ind`, dedupe identical URLs (Next.js occasionally re-emits the
+/// same page across chunks), and clamp to `page_count`.
+fn dedup_preserving_order(entries: Vec<(i32, String)>, page_count: i32) -> Vec<String> {
+    let mut seen: Vec<String> = Vec::with_capacity(entries.len());
+    for (_, url) in entries {
+        if !seen.contains(&url) {
+            seen.push(url);
+        }
+    }
+    if page_count > 0 && seen.len() > page_count as usize {
+        seen.truncate(page_count as usize);
+    }
+    seen
 }

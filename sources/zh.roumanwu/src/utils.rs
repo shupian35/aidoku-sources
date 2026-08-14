@@ -4,7 +4,7 @@
 //! knowledge about rouman5.com specifically (HTTP fetching, page-index
 //! conventions, DOM selectors, etc.) belongs in lib.rs instead.
 
-use aidoku::alloc::{String, Vec, format, string::ToString};
+use aidoku::alloc::{String, Vec, string::ToString};
 
 // ---------- Encoding / hashing ----------
 
@@ -34,12 +34,6 @@ pub(crate) fn extract_url_from_style(style: &str) -> Option<String> {
     let rest = &s[start..];
     let end = rest.find(0x22 as char)?;
     Some(rest[..end].to_string())
-}
-
-pub(crate) fn slice_between<'a>(html: &'a str, start: &str, end: &str) -> Option<&'a str> {
-    let s = html.find(start)? + start.len();
-    let e = html[s..].find(end)? + s;
-    Some(&html[s..e])
 }
 
 // ---------- MD5 ----------
@@ -212,97 +206,4 @@ pub(crate) fn base64_decode(input: &str) -> Vec<u8> {
     }
 
     output
-}
-
-// ---------- JSON helpers ----------
-
-pub(crate) fn json_top_level_string(json: &str, key: &str) -> Option<String> {
-    let needle = format!("\"{}\":\"", key);
-    let i = json.find(&needle)? + needle.len();
-    let rest = &json[i..];
-    // Find the closing quote, handling escaped quotes
-    let mut j = 0;
-    let chars: Vec<char> = rest.chars().collect();
-    while j < chars.len() {
-        if chars[j] == '"' && (j == 0 || chars[j - 1] != '\\') {
-            break;
-        }
-        j += 1;
-    }
-    if j == 0 || j >= chars.len() {
-        return None;
-    }
-    let raw: String = chars[..j].iter().collect();
-    // Process escape sequences
-    let mut out = String::with_capacity(raw.len());
-    let mut chars_iter = raw.chars().peekable();
-    while let Some(c) = chars_iter.next() {
-        if c == '\\' {
-            if let Some(&n) = chars_iter.peek() {
-                match n {
-                    '"' => {
-                        out.push('"');
-                        chars_iter.next();
-                    }
-                    '\\' => {
-                        out.push('\\');
-                        chars_iter.next();
-                    }
-                    'n' => {
-                        out.push('\n');
-                        chars_iter.next();
-                    }
-                    'r' => {
-                        out.push('\r');
-                        chars_iter.next();
-                    }
-                    't' => {
-                        out.push('\t');
-                        chars_iter.next();
-                    }
-                    '/' => {
-                        out.push('/');
-                        chars_iter.next();
-                    }
-                    'u' => {
-                        chars_iter.next(); // skip 'u'
-                        let mut hex = String::with_capacity(4);
-                        for _ in 0..4 {
-                            if let Some(h) = chars_iter.next() {
-                                hex.push(h);
-                            }
-                        }
-                        if let Ok(code) = u32::from_str_radix(&hex, 16) {
-                            if let Some(uch) = char::from_u32(code) {
-                                out.push(uch);
-                            }
-                        }
-                    }
-                    _ => {
-                        out.push(c);
-                        out.push(n);
-                        chars_iter.next();
-                    }
-                }
-            } else {
-                out.push(c);
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    Some(out)
-}
-
-/// Extract a nested string field from a top-level object whose value is itself
-/// an object: `"parent":{"child":"value"}`.
-///
-/// Returns `None` if `parent` isn't present as an object or `child` isn't a
-/// string inside it. Reuses [`json_top_level_string`] for the inner parse so
-/// the escape-sequence logic stays in one place.
-pub(crate) fn json_top_level_object_field(json: &str, parent: &str, child: &str) -> Option<String> {
-    let open = format!("\"{}\":{{", parent);
-    let i = json.find(&open)? + open.len();
-    let rest = &json[i..];
-    json_top_level_string(rest, child)
 }

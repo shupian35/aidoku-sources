@@ -7,10 +7,13 @@ use aidoku::{
 use aidoku_test::aidoku_test;
 
 use super::Roumanwu;
-use crate::chapter::{build_pages, page_count, resolve_chapter_url, truncate_to_page_count};
+use crate::chapter::{
+    build_pages, page_count_from_dom, parse_chapter_pages, resolve_chapter_url,
+    truncate_to_page_count,
+};
+use crate::detail::{decode_entities, json_top_level_string, manga_status_from_text};
 use crate::image::{scramble_slices, unscramble_image_url};
-use crate::listing::extract_manga_cards;
-use crate::utils::{json_top_level_object_field, json_top_level_string};
+use crate::listing::{extract_manga_cards, has_next_page_from_html};
 
 fn new_source() -> Roumanwu {
     <Roumanwu as Source>::new()
@@ -208,9 +211,13 @@ fn get_page_list_filters_corrupted_urls() {
     // URL's JSON string mid-way across chunks, leaving empty/truncated
     // imageUrl values. Those must be dropped, not surfaced as pages — a bad
     // page URL makes the host abort the whole chapter with "load failed".
+    //
+    // We pick a manga whose chapter 0 currently ships >50 pages so the test
+    // catches both regressions: dropping corrupted URLs must not zero out the
+    // chapter, and every surfaced URL must be a real http(s) URL.
     let s = new_source();
     let manga = Manga {
-        key: String::from("3d449abf-d024-4c6b-b0c3-f1fd8e6b6f04"),
+        key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
         ..Default::default()
     };
     let updated = s
@@ -270,43 +277,73 @@ fn chapter_url_is_absolute() {
 }
 
 #[aidoku_test]
-fn page_count_resolves_json_ld_value() {
-    let html = r#"<script type="application/ld+json">{"numberOfPages":42}</script>"#;
-    assert_eq!(page_count(html, ""), Some(42));
+fn page_count_from_dom_reads_widget() {
+    // Site renders the page count as `<div … text-right mr-4>1<!-- -->/<!-- -->73<!-- -->頁</div>`.
+    // SwiftSoup collapses the HTML comments and trims whitespace, so the
+    // resulting text is "1/73頁".
+    let html = r#"
+        <html><body>
+                <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->73<!-- -->頁</div>
+            </body></html>
+    "#;
+    let doc = aidoku::imports::html::Html::parse(html).unwrap();
+    assert_eq!(page_count_from_dom(&doc), Some(73));
 }
 
 #[aidoku_test]
-fn page_count_resolves_html_comment_split() {
-    // <!-- -->N<!-- -->/<!-- -->(junk)<!-- -->頁  ← site splits digits across HTML comments
-    let html = "<!-- -->7<!-- -->/<!-- -->more<!-- -->頁 trailing";
-    assert_eq!(page_count(html, ""), Some(7));
+fn page_count_from_dom_handles_multi_digit_count() {
+    let html = r#"<div class="text-muted-foreground text-right mr-4">5<!-- -->/<!-- -->123<!-- -->頁</div>"#;
+    let doc = aidoku::imports::html::Html::parse(html).unwrap();
+    assert_eq!(page_count_from_dom(&doc), Some(123));
 }
 
 #[aidoku_test]
-fn page_count_resolves_rsc_payload_marker() {
-    // Rouman5 RSC payload: "/",  N  ,"頁"  — the digits are caught between the two strings.
-    let payload = r#"random"/","12","頁"trailing"#;
-    assert_eq!(page_count("", payload), Some(12));
+fn page_count_from_dom_returns_none_without_widget() {
+    let html = r#"<html><body><p>no count widget</p></body></html>"#;
+    let doc = aidoku::imports::html::Html::parse(html).unwrap();
+    assert_eq!(page_count_from_dom(&doc), None);
 }
 
 #[aidoku_test]
-fn page_count_returns_none_when_all_heuristics_fail() {
-    assert_eq!(page_count("", ""), None);
+fn parse_chapter_pages_reassembles_from_rsc_scripts() {
+    // Build a chapter HTML carrying the page count widget + a couple of RSC
+    // script tags. Each script contains the Next.js push pattern; together
+    // their unescaped payload should yield every imageUrl / ind pair.
+    let html = r#"
+        <html><body>
+            <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->2<!-- -->頁</div>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn1.xyz/p0.jpg\",\"ind\":0}"])</script>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn2.xyz/p1.jpg\",\"ind\":1}"])</script>
+            <script>other()</script>
+        </body></html>
+    "#;
+    let (count, urls) = parse_chapter_pages(html).expect("parse");
+    assert_eq!(count, 2);
     assert_eq!(
-        page_count("<html>nothing useful</html>", "no markers"),
-        None
+        urls,
+        vec![
+            String::from("https://r5.rmcdn1.xyz/p0.jpg"),
+            String::from("https://r5.rmcdn2.xyz/p1.jpg"),
+        ]
     );
 }
 
 #[aidoku_test]
-fn page_count_prefers_json_ld_over_other_heuristics() {
-    // All three heuristics could match; JSON-LD wins because it is first in the chain.
+fn parse_chapter_pages_drops_corrupted_urls() {
+    // A truncated imageUrl (the "https" got cut at a chunk boundary) must
+    // be filtered; otherwise the chapter would fail to load that page and
+    // the host aborts the rest of the chapter.
     let html = r#"
-        <script type="application/ld+json">{"numberOfPages":1}</script>
-        <!-- -->999<!-- -->/<!-- -->more<!-- -->頁
+        <html><body>
+            <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->2<!-- -->頁</div>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https\",\"ind\":0}"])</script>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn2.xyz/p1.jpg\",\"ind\":1}"])</script>
+        </body></html>
     "#;
-    let payload = r#""/","9","頁""#;
-    assert_eq!(page_count(html, payload), Some(1));
+    let (count, urls) = parse_chapter_pages(html).expect("parse");
+    assert_eq!(count, 2);
+    assert_eq!(urls.len(), 1);
+    assert_eq!(urls[0], "https://r5.rmcdn2.xyz/p1.jpg");
 }
 
 #[aidoku_test]
@@ -427,11 +464,17 @@ fn listing_provider_default_listing() {
 
 #[aidoku_test]
 fn search_finds_known_manga() {
+    // Search for a term the live site reliably indexes. Pick a high-traffic
+    // tag so the test isn't dependent on any one title still being present.
     let s = new_source();
     let res = s
-        .get_search_manga_list(Some(String::from("娣卞堡")), 1, Vec::new())
+        .get_search_manga_list(Some(String::from("人妻")), 1, Vec::new())
         .expect("search should succeed");
-    assert!(!res.entries.is_empty(), "search should return results");
+    assert!(
+        !res.entries.is_empty(),
+        "search should return results, got {}",
+        res.entries.len()
+    );
 }
 
 #[aidoku_test]
@@ -666,16 +709,48 @@ fn json_top_level_string_returns_value() {
 }
 
 #[aidoku_test]
-fn json_top_level_object_field_returns_nested_value() {
-    let json = r#"{"author":{"name":"George Morikawa","@type":"Person"}}"#;
-    assert_eq!(
-        json_top_level_object_field(json, "author", "name").as_deref(),
-        Some("George Morikawa")
-    );
+fn json_top_level_string_returns_none_for_missing_key() {
+    let json = r#"{"other":42}"#;
+    assert_eq!(json_top_level_string(json, "name"), None);
 }
 
 #[aidoku_test]
-fn json_top_level_object_field_returns_none_when_parent_is_string() {
-    let json = r#"{"author":"anonymous"}"#;
-    assert_eq!(json_top_level_object_field(json, "author", "name"), None);
+fn manga_status_from_text_maps_known_values() {
+    assert_eq!(manga_status_from_text("連載中"), MangaStatus::Ongoing);
+    assert_eq!(manga_status_from_text("已完結"), MangaStatus::Completed);
+    assert_eq!(manga_status_from_text("完結"), MangaStatus::Completed);
+    assert_eq!(manga_status_from_text("休刊中"), MangaStatus::Hiatus);
+    assert_eq!(manga_status_from_text("停刊"), MangaStatus::Hiatus);
+    assert_eq!(manga_status_from_text(""), MangaStatus::Unknown);
+    assert_eq!(manga_status_from_text("garbage"), MangaStatus::Unknown);
+}
+
+#[aidoku_test]
+fn decode_entities_handles_common_html_entities() {
+    let decoded = decode_entities("A &amp; B &quot;C&quot; &#039;D&#039; &lt;E&gt;");
+    assert_eq!(decoded, "A & B \"C\" 'D' <E>");
+}
+
+#[aidoku_test]
+fn has_next_page_detects_next_page_link() {
+    // Numbered pagination: current_page=1 looks for "page=2"; the second
+    // anchor matches. With current_page=3 there is no page=4 anchor and the
+    // page text ("3") doesn't contain `下一頁`/`Next`, so we return false.
+    let html = r#"
+        <html><body>
+            <a class="pg" href="/books?page=3">3</a>
+            <a class="next" href="/books?page=2">2</a>
+        </body></html>
+    "#;
+    assert!(has_next_page_from_html(html, 1));
+    assert!(!has_next_page_from_html(html, 3));
+    assert!(!has_next_page_from_html(html, 0));
+}
+
+#[aidoku_test]
+fn has_next_page_detects_text_only_pagination() {
+    // Some listing pages don't number their pagination — only `<a>下一頁</a>`.
+    // The text fallback handles those.
+    let html = "<html><body><a href=\"#\">下一頁</a></body></html>";
+    assert!(has_next_page_from_html(html, 0));
 }

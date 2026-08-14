@@ -113,12 +113,34 @@ pub(crate) fn extract_manga_cards(html: &str) -> Result<Vec<Manga>> {
 }
 
 // Decide whether the listing/search page has another page of results.
-fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
+//
+// The site renders pagination as a series of `<a href="…?page=N">N</a>`
+// anchors followed by a `<a …>下一頁</a>` link, both inside the same
+// pagination widget. We detect "has next" by scanning anchor `href`s for
+// the next page number, falling back to the textual `下一頁` / `Next` label
+// on pages that don't number their pagination (search results do this).
+pub(crate) fn has_next_page_from_html(html: &str, current_page_0idx: i32) -> bool {
+    let doc = match Html::parse(html) {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
     let needle = format!("page={}", current_page_0idx + 1);
-    if html.contains(&needle) {
-        return true;
+    let Some(anchors) = doc.select("a") else {
+        return false;
+    };
+    for a in anchors {
+        if let Some(href) = a.attr("href") {
+            if href.contains(&needle) {
+                return true;
+            }
+        }
+        if let Some(text) = a.text() {
+            if text.contains("下一頁") || text.contains("Next") {
+                return true;
+            }
+        }
     }
-    html.contains("下一頁") || html.contains("Next")
+    false
 }
 
 pub(crate) fn parse_manga_listing(html: &str, current_page_0idx: i32) -> Result<MangaPageResult> {

@@ -1,12 +1,18 @@
 //! Home page parsing.
 //!
-//! The rouman5.com home page is rendered server-side but uses Tailwind class
-//! hashes that don't survive into stable CSS selectors. We locate each section
-//! by its title string, slice the surrounding HTML, then hand the section
-//! slice to [`crate::listing::extract_manga_cards`] for DOM-based card
-//! extraction — the same parser the listing and search pages use.
+//! The rouman5.com home page is rendered server-side as a vertical stack of
+//! sections. Each section starts with a `text-2xl` title div (matching one
+//! of the known titles in `HOME_SECTIONS`) and is followed — possibly after
+//! an ad-slot div — by a `grid` div holding the section's manga anchors.
+//!
+//! Each section's title element lives inside the section's wrapper div; the
+//! manga grid is the last child div of that wrapper. We locate the title
+//! element with HTML selectors, walk up to the wrapper, then walk the wrapper
+//! children in reverse to find the grid.
 
-use aidoku::alloc::{String, Vec, format, vec};
+use aidoku::alloc::string::ToString;
+use aidoku::alloc::{String, Vec};
+use aidoku::imports::html::{Document, Element, Html};
 use aidoku::{HomeComponent, HomeComponentValue, HomeLayout, Link, Result};
 
 use crate::listing::extract_manga_cards;
@@ -58,49 +64,27 @@ const HOME_SECTIONS: &[SectionSpec] = &[
 ];
 
 pub(crate) fn parse_home_layout(html: &str) -> Result<HomeLayout> {
+    let doc = Html::parse(html)?;
     let mut components: Vec<HomeComponent> = Vec::new();
+
     for (titles, subtitles, kind) in HOME_SECTIONS {
-        let mut found: Option<(usize, &str)> = None;
-        for title in titles.iter() {
-            let tag = format!(
-                "<div class=\"text-2xl text-gray-900 dark:text-gray-100\">{}</div>",
-                title
-            );
-            if let Some(i) = html.find(&tag) {
-                found = Some((i, title));
-                break;
-            }
-        }
-        let (t_idx, used_title) = match found {
-            Some(x) => x,
+        let title_el = match find_title_element(&doc, titles) {
+            Some(e) => e,
             None => continue,
         };
-        let end_idx = HOME_SECTIONS
-            .iter()
-            .flat_map(|(other_titles, _, _)| {
-                if other_titles == titles {
-                    return vec![];
-                }
-                other_titles
-                    .iter()
-                    .filter_map(|t| {
-                        let tag = format!(
-                            "<div class=\"text-2xl text-gray-900 dark:text-gray-100\">{}</div>",
-                            t
-                        );
-                        html.find(&tag)
-                            .and_then(|i| if i > t_idx { Some(i) } else { None })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .min()
-            .unwrap_or(html.len());
-        let range = &html[t_idx..end_idx];
+        let used_title = title_el
+            .text()
+            .map(|t| t.trim().to_string())
+            .unwrap_or_default();
 
-        // Shared DOM parser produces Manga entries; the BigScroller arm
-        // needs them directly, while Scroller/MangaList wrap each one in a
-        // Link so the UI shows titles + cover thumbnails.
-        let mangas: Vec<aidoku::Manga> = extract_manga_cards(range)?;
+        let grid_html = match find_manga_grid_html(&title_el) {
+            Some(s) => s,
+            None => continue,
+        };
+        let mangas = match extract_manga_cards(&grid_html) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
         let links: Vec<Link> = mangas.iter().map(|m| Link::from(m.clone())).collect();
 
         let subtitle = subtitles.first().map(|s| String::from(*s));
@@ -121,10 +105,55 @@ pub(crate) fn parse_home_layout(html: &str) -> Result<HomeLayout> {
             },
         };
         components.push(HomeComponent {
-            title: Some(String::from(used_title)),
+            title: Some(used_title),
             subtitle,
             value,
         });
     }
     Ok(HomeLayout { components })
+}
+
+// ---------- Helpers ----------
+
+/// Find the first `div.text-2xl` whose trimmed text matches one of the
+/// supplied title aliases. SwiftSoup's `:matches(REGEX)` would do this in a
+/// single query, but anchoring on the class is more robust to future site
+/// edits that add new sections with new titles.
+fn find_title_element(doc: &Document, aliases: &[&str]) -> Option<Element> {
+    let list = doc.select("div.text-2xl")?;
+    for el in list {
+        if let Some(t) = el.text() {
+            let trimmed = t.trim();
+            if aliases.iter().any(|a| *a == trimmed) {
+                return Some(el);
+            }
+        }
+    }
+    None
+}
+
+/// Walk up from the title element to find the section wrapper (a div that
+/// contains a `/books/...` anchor), then walk that wrapper's children in
+/// reverse to locate the grid that holds the section's manga cards. Return
+/// that grid's outer HTML so the shared card parser can consume it.
+fn find_manga_grid_html(title_el: &Element) -> Option<String> {
+    let wrapper = find_section_wrapper(title_el)?;
+    let mut children = wrapper.children();
+    while let Some(child) = children.next_back() {
+        if child.select_first("a[href^=\"/books/\"]").is_some() {
+            return child.outer_html();
+        }
+    }
+    None
+}
+
+/// Walk up from `title_el` until we find a parent that contains a
+/// `/books/...` anchor (i.e. the section wrapper that holds both the title
+/// and the manga grid).
+fn find_section_wrapper(title_el: &Element) -> Option<Element> {
+    let mut current = title_el.parent()?;
+    while current.select_first("a[href^=\"/books/\"]").is_none() {
+        current = current.parent()?;
+    }
+    Some(current)
 }
