@@ -38,7 +38,7 @@ Commands:
 
 ### 项目结构
 
-```
+```text
 aidoku-sources/
 ├── .github/workflows/
 │   └── build.yaml            # CI：构建所有源、生成 index、部署到 GitHub Pages
