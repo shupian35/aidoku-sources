@@ -2,12 +2,40 @@
 	"info": {
 		"id": "zh.nnhanman",
 		"name": "鸟鸟韩漫",
-		"version": 11,
+		"version": 13,
 		"url": "https://nnhm7.com",
+		"urls": [
+			"https://nnhm7.com",
+			"https://nnhm81.com",
+			"https://nnhm93.com",
+			"https://nnhm8.com",
+			"https://nnhm9.com",
+			"https://nnhm5.com",
+			"https://nnhm5.org",
+			"https://nnhm7.org",
+			"https://nnhm5.xyz",
+			"https://nnhanman2.com",
+			"https://nnhm2.com",
+			"https://nnhm3.xyz",
+			"https://nnhanman3.com",
+			"https://nnhm8.xyz",
+			"https://nnhanman5.com",
+			"https://nnhanman9.com",
+			"https://nnhanman7.com",
+			"https://nnhanman8.com",
+			"https://nnhanman6.com",
+			"https://nnhanman.org",
+			"https://nnhm6.com",
+			"https://nnhm6.xyz",
+			"https://nnhm7.xyz"
+		],
 		"contentRating": 2,
 		"languages": [
 			"zh"
 		]
 	},
-	"listings": []
+	"listings": [],
+	"config": {
+		"allowsBaseUrlSelect": true
+	}
 }

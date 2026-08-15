@@ -9,14 +9,22 @@ pub(crate) const USER_AGENT: &str =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) \
 	 Chrome/120.0.0.0 Safari/537.36";
 
-// Returns the user-configured base URL, or `BASE_URL` when the dynamic
-// `base_url` setting hasn't been set. Every URL the source builds
-// (search, listing, manga detail, chapter detail, image Referer) goes
-// through here so a custom address takes effect across the board.
+// Returns the effective base URL, or `BASE_URL` when no override is set.
+// Every URL the source builds (search, listing, manga detail, chapter
+// detail, image Referer) goes through here so a custom address takes
+// effect across the board.
+//
+// Priority: the official `url` defaults key (the app stores the user's
+// pick from `info.urls` there when `config.allowsBaseUrlSelect` is set in
+// source.json), then the pre-v12 `base_url` dynamic setting (kept so users
+// who customized it keep their override), then `BASE_URL`.
 pub(crate) fn get_base_url() -> String {
-	match defaults_get::<String>("base_url") {
+	match defaults_get::<String>("url") {
 		Some(url) if !url.trim().is_empty() => url,
-		_ => String::from(BASE_URL),
+		_ => match defaults_get::<String>("base_url") {
+			Some(url) if !url.trim().is_empty() => url,
+			_ => String::from(BASE_URL),
+		},
 	}
 }
 

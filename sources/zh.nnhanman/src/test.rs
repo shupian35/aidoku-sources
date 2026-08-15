@@ -12,9 +12,11 @@ fn new_source() -> Nnhm7 {
 
 #[aidoku_test]
 fn get_base_url_defaults_to_const_when_no_override() {
-    // With no `base_url` dynamic setting set, every URL the source builds
-    // must use the hard-coded `BASE_URL` constant. The override path is
-    // exercised at runtime when a user sets the dynamic setting.
+    // With no `url` defaults key set (and no legacy `base_url` override),
+    // every URL the source builds must use the hard-coded `BASE_URL`
+    // constant. The override path is exercised at runtime by the app's
+    // base-URL picker (`config.allowsBaseUrlSelect` in source.json), which
+    // stores the selection under the `url` defaults key.
     assert_eq!(get_base_url(), BASE_URL);
 }
 

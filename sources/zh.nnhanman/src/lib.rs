@@ -17,7 +17,7 @@ mod parser;
 mod source_url;
 
 use parser::{has_next_page, parse_manga_grid, parse_manga_list, slug_from_url};
-use source_url::{BASE_URL, USER_AGENT, get_base_url, html_get_string};
+use source_url::{USER_AGENT, get_base_url, html_get_string};
 
 struct Nnhm7;
 
@@ -369,17 +369,18 @@ impl DynamicFilters for Nnhm7 {
 	}
 }
 
-// Lets users override the upstream host in the source's settings page.
-// The override flows through `get_base_url()` and is used everywhere a
-// URL is built — search, listing, manga/chapter fetches, deep-link
-// dispatches, and the Referer sent for chapter image fetches.
+// Lets users switch the upstream host from the source's settings page.
+// The official base-URL mechanism (`info.urls` + `config.allowsBaseUrlSelect`
+// in source.json) makes the app store the user's pick under the `url`
+// defaults key; `get_base_url()` reads it and is used everywhere a URL is
+// built — search, listing, manga/chapter fetches, deep-link dispatches,
+// and the Referer sent for chapter image fetches.
 //
 // The settings also carry the site's "重要提醒" notice so users can
 // reach the operator's contact email or the mirror landing page if the
 // configured host goes down.
 impl DynamicSettings for Nnhm7 {
 	fn get_dynamic_settings(&self) -> Result<Vec<aidoku::Setting>> {
-		let current_url = get_base_url();
 		Ok(vec![
 			aidoku::GroupSetting {
 				key: "notice".into(),
@@ -408,14 +409,6 @@ impl DynamicSettings for Nnhm7 {
 					}
 					.into(),
 				],
-				..Default::default()
-			}
-			.into(),
-			aidoku::TextSetting {
-				key: "base_url".into(),
-				title: "源地址".into(),
-				placeholder: Some(BASE_URL.into()),
-				default: Some(current_url.into()),
 				..Default::default()
 			}
 			.into(),
