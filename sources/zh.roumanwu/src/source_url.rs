@@ -9,7 +9,7 @@ use aidoku::alloc::String;
 use aidoku::imports::defaults::defaults_get;
 use aidoku::imports::net::Request;
 
-pub(crate) const BASE_URL: &str = "https://rouman5.com";
+pub(crate) const BASE_URL: &str = "https://roum28.xyz";
 
 pub(crate) const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
 	(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
