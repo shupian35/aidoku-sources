@@ -2,8 +2,12 @@
   "info": {
     "id": "zh.roumanwu",
     "name": "肉漫屋",
-    "version": 14,
+    "version": 15,
     "url": "https://rouman5.com",
+    "urls": [
+      "https://rouman5.com",
+      "https://roum28.xyz"
+    ],
     "contentRating": 2,
     "languages": [
       "zh"
@@ -25,5 +29,8 @@
       "name": "全部",
       "kind": 1
     }
-  ]
-}
+  ],
+  "config": {
+    "allowsBaseUrlSelect": true
+  }
+}
