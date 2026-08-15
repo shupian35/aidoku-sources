@@ -3,7 +3,7 @@ use aidoku::imports::defaults::defaults_get;
 use aidoku::imports::net::Request;
 use aidoku::Result;
 
-pub(crate) const BASE_URL: &str = "https://nnhm81.com";
+pub(crate) const BASE_URL: &str = "https://nnhm7.com";
 
 pub(crate) const USER_AGENT: &str =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) \
