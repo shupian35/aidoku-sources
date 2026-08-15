@@ -24,7 +24,7 @@ use detail::parse_manga_detail;
 use home::parse_home_layout;
 use image::{unscramble_image, unscramble_image_url};
 use listing::parse_manga_listing;
-use source_url::{USER_AGENT, get_base_url, html_get_string};
+use source_url::{BASE_URL, USER_AGENT, get_base_url, html_get_string};
 use utils::{site_page, urlencode};
 
 pub struct Roumanwu;
@@ -143,6 +143,20 @@ impl DeepLinkHandler for Roumanwu {
 impl DynamicSettings for Roumanwu {
     fn get_dynamic_settings(&self) -> Result<Vec<aidoku::Setting>> {
         Ok(vec![
+            // The app-generated Base URL picker (`allowsBaseUrlSelect` +
+            // `info.urls` in source.json) only offers preset mirrors, so
+            // this free-text field is the way to point the source at a
+            // brand-new domain. get_base_url() treats it as the highest
+            // priority override.
+            aidoku::TextSetting {
+                key: "base_url".into(),
+                title: "自定义网址".into(),
+                placeholder: Some(BASE_URL.into()),
+                autocorrection_disabled: Some(true),
+                refreshes: Some(vec!["content".into()]),
+                ..Default::default()
+            }
+            .into(),
             aidoku::LinkSetting {
                 key: "address_link".into(),
                 title: "地址发布：https://rdz3.xyz/dizhi".into(),

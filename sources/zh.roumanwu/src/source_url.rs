@@ -15,14 +15,16 @@ pub(crate) const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) A
 	(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 pub(crate) fn get_base_url() -> String {
-    // Official base-URL mechanism: with `config.allowsBaseUrlSelect` in
-    // source.json, the app stores the user's pick from `info.urls` under
-    // the `url` defaults key. Fall back to the pre-v15 `base_url` dynamic
-    // setting (kept so users who customized it keep their override), then
-    // to the constant.
-    match defaults_get::<String>("url") {
+    // Priority: the source's own "自定义网址" text setting (the `base_url`
+    // defaults key) is the user's explicit override, so it wins over the
+    // app-generated Base URL picker (`config.allowsBaseUrlSelect` +
+    // `info.urls` in source.json, which the app exposes as the `url`
+    // defaults key). The picker always registers a default value, so it
+    // must come second — with the old order a typed custom URL would never
+    // take effect. `BASE_URL` is the final fallback.
+    match defaults_get::<String>("base_url") {
         Some(url) if !url.trim().is_empty() => url,
-        _ => match defaults_get::<String>("base_url") {
+        _ => match defaults_get::<String>("url") {
             Some(url) if !url.trim().is_empty() => url,
             _ => String::from(BASE_URL),
         },

@@ -14,14 +14,17 @@ pub(crate) const USER_AGENT: &str =
 // detail, image Referer) goes through here so a custom address takes
 // effect across the board.
 //
-// Priority: the official `url` defaults key (the app stores the user's
-// pick from `info.urls` there when `config.allowsBaseUrlSelect` is set in
-// source.json), then the pre-v12 `base_url` dynamic setting (kept so users
-// who customized it keep their override), then `BASE_URL`.
+// Priority: the source's own "自定义网址" text setting (the `base_url`
+// defaults key) is the user's explicit override, so it wins over the
+// app-generated Base URL picker (`config.allowsBaseUrlSelect` + `info.urls`
+// in source.json, which the app exposes as the `url` defaults key). The
+// picker always registers a default value, so it must come second — with
+// the old order a typed custom URL would never take effect. `BASE_URL` is
+// the final fallback.
 pub(crate) fn get_base_url() -> String {
-	match defaults_get::<String>("url") {
+	match defaults_get::<String>("base_url") {
 		Some(url) if !url.trim().is_empty() => url,
-		_ => match defaults_get::<String>("base_url") {
+		_ => match defaults_get::<String>("url") {
 			Some(url) if !url.trim().is_empty() => url,
 			_ => String::from(BASE_URL),
 		},

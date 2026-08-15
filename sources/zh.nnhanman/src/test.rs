@@ -21,6 +21,40 @@ fn get_base_url_defaults_to_const_when_no_override() {
 }
 
 #[aidoku_test]
+fn custom_base_url_setting_takes_priority() {
+    // Regression: the app-generated Base URL picker (the `url` defaults
+    // key) always carries a value — the app registers the first preset as
+    // its default — so a URL typed into the "自定义网址" text setting (the
+    // `base_url` defaults key) must be consulted first. With the old order
+    // the picker's value shadowed it and a custom URL could never take
+    // effect, leaving users stuck with the preset mirrors.
+    use aidoku::imports::defaults::{defaults_set, DefaultValue};
+
+    // Custom text wins over the picker selection.
+    defaults_set(
+        "base_url",
+        DefaultValue::String(String::from("https://nnhm99.com")),
+    );
+    defaults_set(
+        "url",
+        DefaultValue::String(String::from("https://nnhm81.com")),
+    );
+    assert_eq!(get_base_url(), "https://nnhm99.com");
+
+    // Empty custom text falls through to the picker selection.
+    defaults_set("base_url", DefaultValue::String(String::from("")));
+    assert_eq!(get_base_url(), "https://nnhm81.com");
+
+    // Nothing set falls back to the constant.
+    defaults_set("url", DefaultValue::String(String::from("")));
+    assert_eq!(get_base_url(), BASE_URL);
+
+    // Clean up so sibling tests see no overrides.
+    defaults_set("base_url", DefaultValue::Null);
+    defaults_set("url", DefaultValue::Null);
+}
+
+#[aidoku_test]
 fn manga_url_is_absolute() {
     // Regression: the manga detail page renders an "open in browser"
     // button. Aidoku dispatches that using the manga's `url` field, which

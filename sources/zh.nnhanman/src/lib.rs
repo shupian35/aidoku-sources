@@ -17,7 +17,7 @@ mod parser;
 mod source_url;
 
 use parser::{has_next_page, parse_manga_grid, parse_manga_list, slug_from_url};
-use source_url::{USER_AGENT, get_base_url, html_get_string};
+use source_url::{BASE_URL, USER_AGENT, get_base_url, html_get_string};
 
 struct Nnhm7;
 
@@ -370,11 +370,14 @@ impl DynamicFilters for Nnhm7 {
 }
 
 // Lets users switch the upstream host from the source's settings page.
-// The official base-URL mechanism (`info.urls` + `config.allowsBaseUrlSelect`
-// in source.json) makes the app store the user's pick under the `url`
-// defaults key; `get_base_url()` reads it and is used everywhere a URL is
-// built — search, listing, manga/chapter fetches, deep-link dispatches,
-// and the Referer sent for chapter image fetches.
+// The app-generated Base URL picker (`info.urls` + `config.allowsBaseUrlSelect`
+// in source.json) only offers preset mirrors, so the first setting here is
+// a free-text "自定义网址" field (`base_url` defaults key) that lets users
+// point the source at a brand-new domain; `get_base_url()` treats it as the
+// highest priority override. The picker's selection lives under the `url`
+// defaults key and is the second priority. `get_base_url()` is used
+// everywhere a URL is built — search, listing, manga/chapter fetches,
+// deep-link dispatches, and the Referer sent for chapter image fetches.
 //
 // The settings also carry the site's "重要提醒" notice so users can
 // reach the operator's contact email or the mirror landing page if the
@@ -382,6 +385,15 @@ impl DynamicFilters for Nnhm7 {
 impl DynamicSettings for Nnhm7 {
 	fn get_dynamic_settings(&self) -> Result<Vec<aidoku::Setting>> {
 		Ok(vec![
+			aidoku::TextSetting {
+				key: "base_url".into(),
+				title: "自定义网址".into(),
+				placeholder: Some(BASE_URL.into()),
+				autocorrection_disabled: Some(true),
+				refreshes: Some(vec!["content".into()]),
+				..Default::default()
+			}
+			.into(),
 			aidoku::GroupSetting {
 				key: "notice".into(),
 				title: "鸟鸟韩漫重要提醒".into(),

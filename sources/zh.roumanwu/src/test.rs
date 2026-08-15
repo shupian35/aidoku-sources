@@ -14,9 +14,44 @@ use crate::chapter::{
 use crate::detail::{decode_entities, json_top_level_string, manga_status_from_text};
 use crate::image::{scramble_slices, unscramble_image_url};
 use crate::listing::{extract_manga_cards, has_next_page_from_html};
+use crate::source_url::{BASE_URL, get_base_url};
 
 fn new_source() -> Roumanwu {
     <Roumanwu as Source>::new()
+}
+
+#[aidoku_test]
+fn custom_base_url_setting_takes_priority() {
+    // Regression: the app-generated Base URL picker (the `url` defaults
+    // key) always carries a value — the app registers the first preset as
+    // its default — so a URL typed into the "自定义网址" text setting (the
+    // `base_url` defaults key) must be consulted first. With the old order
+    // the picker's value shadowed it and a custom URL could never take
+    // effect, leaving users stuck with the preset mirrors.
+    use aidoku::imports::defaults::{DefaultValue, defaults_set};
+
+    // Custom text wins over the picker selection.
+    defaults_set(
+        "base_url",
+        DefaultValue::String(String::from("https://roum99.example")),
+    );
+    defaults_set(
+        "url",
+        DefaultValue::String(String::from("https://roum28.xyz")),
+    );
+    assert_eq!(get_base_url(), "https://roum99.example");
+
+    // Empty custom text falls through to the picker selection.
+    defaults_set("base_url", DefaultValue::String(String::from("")));
+    assert_eq!(get_base_url(), "https://roum28.xyz");
+
+    // Nothing set falls back to the constant.
+    defaults_set("url", DefaultValue::String(String::from("")));
+    assert_eq!(get_base_url(), BASE_URL);
+
+    // Clean up so sibling tests see no overrides.
+    defaults_set("base_url", DefaultValue::Null);
+    defaults_set("url", DefaultValue::Null);
 }
 
 #[aidoku_test]
