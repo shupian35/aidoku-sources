@@ -451,6 +451,18 @@ impl Home for Nnhm7 {
 					let cover = li
 						.select_first("img")
 						.and_then(|img| img.attr("src").map(|s| s.to_string()));
+					// Latest chapter info lives in `span.info > a`, rendered
+					// as `第4話` etc. without its own wrapper class, so the
+					// text and the `title` attribute carry the same value.
+					let subtitle = li
+						.select_first("span.info a")
+						.and_then(|a| a.text())
+						.map(|t| t.trim().to_string())
+						.filter(|t| !t.is_empty())
+						.or_else(|| {
+							li.select_first("span.info a")
+								.and_then(|a| a.attr("title").map(|t| t.to_string()))
+						});
 					let manga = Manga {
 						key,
 						title: m_title.clone(),
@@ -459,7 +471,7 @@ impl Home for Nnhm7 {
 					};
 					links.push(Link {
 						title: m_title,
-						subtitle: None,
+						subtitle,
 						image_url: cover,
 						value: Some(LinkValue::Manga(manga)),
 					});

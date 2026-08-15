@@ -1,5 +1,5 @@
 use aidoku::alloc::String;
-use aidoku::{Manga, PageContent, Source};
+use aidoku::{Home, HomeComponentValue, Manga, PageContent, Source};
 use aidoku_test::aidoku_test;
 
 use super::Nnhm7;
@@ -209,6 +209,34 @@ fn viewer_is_right_to_left_for_published_manga() {
         updated.viewer,
         aidoku::Viewer::RightToLeft,
         "viewer should be RightToLeft for published manga"
+    );
+}
+
+#[aidoku_test]
+fn home_sections_carry_latest_chapter_subtitles() {
+    // Regression: home sections previously rendered each manga with only a
+    // title. The latest chapter is marked up as `span.info > a` inside the
+    // same `ul.col_3_1 > li` grid, but get_home ignored it, so the home
+    // screen showed no update info at all.
+    let s = new_source();
+    let layout = <Nnhm7 as Home>::get_home(&s).expect("get home should succeed");
+    let mut checked = 0;
+    for component in layout.components {
+        let HomeComponentValue::MangaList { entries, .. } = &component.value else {
+            continue;
+        };
+        for link in entries {
+            checked += 1;
+            assert!(
+                link.subtitle.as_deref().is_some_and(|s| !s.is_empty()),
+                "home link for {:?} must carry a latest-chapter subtitle",
+                link.title
+            );
+        }
+    }
+    assert!(
+        checked >= 9,
+        "expected at least one full home section, got {checked} links"
     );
 }
 
