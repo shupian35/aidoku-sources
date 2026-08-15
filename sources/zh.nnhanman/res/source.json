@@ -2,10 +2,9 @@
 	"info": {
 		"id": "zh.nnhanman",
 		"name": "鸟鸟韩漫",
-		"version": 13,
-		"url": "https://nnhm7.com",
+		"version": 14,
+		"url": "https://nnhm81.com",
 		"urls": [
-			"https://nnhm7.com",
 			"https://nnhm81.com",
 			"https://nnhm93.com",
 			"https://nnhm8.com",
@@ -27,7 +26,10 @@
 			"https://nnhanman.org",
 			"https://nnhm6.com",
 			"https://nnhm6.xyz",
-			"https://nnhm7.xyz"
+			"https://nnhm7.xyz",
+			"https://nnhm95.com",
+			"https://nnhm92.com",
+			"https://nnhm91.com"
 		],
 		"contentRating": 2,
 		"languages": [
