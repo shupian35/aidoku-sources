@@ -386,24 +386,13 @@ impl DynamicSettings for Nnhm7 {
 				key: "notice".into(),
 				title: "鸟鸟韩漫重要提醒".into(),
 				footer: Some(concat!(
-					"近期天下不太平\n",
-					"请务必截图保存此页面，存到邮箱\n",
-					"发任意信息到这获得最新网址：nnhanman666@gmail.com\n",
-					"或将地址发布页 nnfb.xyz 加入浏览器收藏夹！如果网站无法访问请截图发给我们，收到信会最快速度修复！"
+					"发任意信息到这获得最新网址：nnhanman18@gmail.com\n"
 				).into()),
 				items: vec![
 					aidoku::LinkSetting {
 						key: "contact_email".into(),
-						title: "发邮件：nnhanman666@gmail.com".into(),
-						url: "mailto:nnhanman666@gmail.com".into(),
-						external: Some(true),
-						..Default::default()
-					}
-					.into(),
-					aidoku::LinkSetting {
-						key: "mirror_url".into(),
-						title: "地址发布页：nnfb.xyz".into(),
-						url: "https://nnfb.xyz".into(),
+						title: "发邮件：nnhanman18@gmail.comm".into(),
+						url: "mailto:nnhanman18@gmail.com".into(),
 						external: Some(true),
 						..Default::default()
 					}
