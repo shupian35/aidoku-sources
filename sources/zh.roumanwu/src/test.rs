@@ -7,10 +7,7 @@ use aidoku::{
 use aidoku_test::aidoku_test;
 
 use super::Roumanwu;
-use crate::chapter::{
-    build_pages, page_count_from_dom, parse_chapter_pages, resolve_chapter_url,
-    truncate_to_page_count,
-};
+use crate::chapter::{build_pages, page_count_from_dom, parse_chapter_pages, resolve_chapter_url};
 use crate::detail::{decode_entities, json_top_level_string, manga_status_from_text};
 use crate::image::{scramble_slices, unscramble_image_url};
 use crate::listing::{extract_manga_cards, has_next_page_from_html};
@@ -176,20 +173,6 @@ fn resolve_chapter_url_prepends_base_for_relative_path() {
 }
 
 #[aidoku_test]
-fn truncate_to_page_count_caps_at_page_count() {
-    let urls: Vec<String> = (0..20).map(|i| format!("https://x/{i}")).collect();
-    let out = truncate_to_page_count(urls, 5);
-    assert_eq!(out.len(), 5);
-}
-
-#[aidoku_test]
-fn truncate_to_page_count_is_noop_when_zero_or_too_small() {
-    let urls: Vec<String> = (0..3).map(|i| format!("https://x/{i}")).collect();
-    assert_eq!(truncate_to_page_count(urls.clone(), 0).len(), 3);
-    assert_eq!(truncate_to_page_count(urls, 99).len(), 3);
-}
-
-#[aidoku_test]
 fn build_pages_marks_scrambled_urls_with_context() {
     let tagged = vec![
         (String::from("https://x/a"), false),
@@ -249,7 +232,9 @@ fn get_page_list_filters_corrupted_urls() {
     //
     // We pick a manga whose chapter 0 currently ships >50 pages so the test
     // catches both regressions: dropping corrupted URLs must not zero out the
-    // chapter, and every surfaced URL must be a real http(s) URL.
+    // chapter, and every surfaced URL must be a real http(s) URL. The
+    // widget advertises 73 pages but the RSC actually has 128, so we want
+    // 100+ to catch the stale-widget regression safely above that floor.
     let s = new_source();
     let manga = Manga {
         key: String::from("cm4sx1zpa000avnl0ziqnbfy5"),
@@ -264,7 +249,7 @@ fn get_page_list_filters_corrupted_urls() {
         .get_page_list(manga, first.clone())
         .expect("get page list");
     assert!(
-        pages.len() >= 50,
+        pages.len() >= 100,
         "should have many pages, got {}",
         pages.len()
     );
@@ -382,6 +367,29 @@ fn parse_chapter_pages_drops_corrupted_urls() {
 }
 
 #[aidoku_test]
+fn parse_chapter_pages_ignores_stale_widget_count() {
+    // Regression: the chapter detail page's "1/N頁" widget frequently
+    // ships a stale page count (e.g. the chapter actually has 128 pages but
+    // the widget says 73). Clamping to the widget dropped real pages; the
+    // page list must surface every deduped URL that the RSC exposes even
+    // when the widget is significantly shorter than the payload.
+    let html = r#"
+        <html><body>
+            <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->2<!-- -->頁</div>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn1.xyz/p0.jpg\",\"ind\":0}"])</script>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn2.xyz/p1.jpg\",\"ind\":1}"])</script>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn3.xyz/p2.jpg\",\"ind\":2}"])</script>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn4.xyz/p3.jpg\",\"ind\":3}"])</script>
+        </body></html>
+    "#;
+    let (count, urls) = parse_chapter_pages(html).expect("parse");
+    // The widget says 2 but the RSC actually has 4 pages; we must surface
+    // all 4 rather than clamping to the widget.
+    assert_eq!(count, 2);
+    assert_eq!(urls.len(), 4);
+}
+
+#[aidoku_test]
 fn get_page_list_returns_many_pages() {
     let s = new_source();
     let manga = Manga {
@@ -397,8 +405,11 @@ fn get_page_list_returns_many_pages() {
         .get_page_list(manga, first.clone())
         .expect("get page list");
     assert!(!pages.is_empty(), "pages should be non-empty");
+    // The widget on the chapter detail page advertises 73 pages, but the
+    // RSC payload actually has 128 unique URLs for this chapter. Surface
+    // them all — clamping to the widget used to drop ~55 pages.
     assert!(
-        pages.len() >= 50,
+        pages.len() >= 100,
         "should have many pages, got {}",
         pages.len()
     );
@@ -431,8 +442,10 @@ fn get_page_list_returns_lazy_urls_with_scramble_context() {
     let pages: Vec<Page> = s
         .get_page_list(manga, first.clone())
         .expect("get page list");
+    // The widget advertises 73 but the RSC has 128 pages; we must surface
+    // all of them, not clamp to the widget.
     assert!(
-        pages.len() >= 50,
+        pages.len() >= 100,
         "should have many pages, got {}",
         pages.len()
     );

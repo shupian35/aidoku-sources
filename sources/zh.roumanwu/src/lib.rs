@@ -19,7 +19,7 @@ mod listing;
 mod source_url;
 mod utils;
 
-use chapter::{build_pages, parse_chapter_pages, resolve_chapter_url, truncate_to_page_count};
+use chapter::{build_pages, parse_chapter_pages, resolve_chapter_url};
 use detail::parse_manga_detail;
 use home::parse_home_layout;
 use image::{unscramble_image, unscramble_image_url};
@@ -77,8 +77,15 @@ impl Source for Roumanwu {
             .clone()
             .unwrap_or_else(|| format!("/books/{}/{}", manga.key, chapter.key));
         let html = html_get_string(&resolve_chapter_url(&path, &get_base_url()))?;
-        let (page_count, urls) = parse_chapter_pages(&html)?;
-        let tagged = truncate_to_page_count(urls, page_count)
+        // The (page_count, urls) pair carries the widget count for symmetry
+        // with other rouman5 scrapers, but we deliberately ignore the widget
+        // count here: the page count the chapter detail page advertises is
+        // frequently stale (e.g. `1/73` for a chapter with 128 pages), and
+        // clamping to it dropped real pages while leaving related-manga
+        // cards in the list. `urls` is already deduped in
+        // `parse_chapter_pages`, so we just emit every page it surfaces.
+        let (_page_count, urls) = parse_chapter_pages(&html)?;
+        let tagged = urls
             .into_iter()
             .map(|u| (u.clone(), unscramble_image_url(&u)))
             .collect();

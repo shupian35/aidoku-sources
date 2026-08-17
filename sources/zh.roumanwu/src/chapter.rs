@@ -9,7 +9,12 @@
 //!    unescaped and concatenated, the payload contains `"imageUrl":"…"`
 //!    / `"ind":N` pairs that list every page.
 //!
-//! The page count is fetched from (1); the page list is reassembled from (2).
+//! The page count widget is fetched for symmetry with the source's other
+//! callers but is no longer used to truncate the page list — the site
+//! regularly emits a stale widget count (e.g. `1/73` for a chapter that
+//! actually has 128 pages), and clamping to the widget drops real pages
+//! while leaving related-manga cards behind. The page list is reassembled
+//! purely from (2).
 
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format};
@@ -50,7 +55,7 @@ pub(crate) fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
 
     // Extract (imageUrl, ind) pairs from the concatenated payload.
     let entries = extract_image_url_ind_pairs(&payload);
-    Ok((page_count, dedup_preserving_order(entries, page_count)))
+    Ok((page_count, dedup_preserving_order(entries)))
 }
 
 /// Resolve a chapter path into an absolute URL.
@@ -64,19 +69,6 @@ pub(crate) fn resolve_chapter_url(path: &str, base: &str) -> String {
         path.to_string()
     } else {
         format!("{}{}", base, path)
-    }
-}
-
-/// Truncate a parsed page URL list to `page_count`.
-///
-/// The RSC payload sometimes embeds imageUrl entries for related-manga
-/// cards alongside real chapter pages; `page_count` (from the page widget)
-/// trims those off.
-pub(crate) fn truncate_to_page_count(urls: Vec<String>, page_count: i32) -> Vec<String> {
-    if page_count > 0 && urls.len() > page_count as usize {
-        urls[..page_count as usize].to_vec()
-    } else {
-        urls
     }
 }
 
@@ -185,7 +177,7 @@ fn unescape_json_string_into(inner: &str, out: &mut String) {
 
 /// Scan the unescaped RSC payload for `"imageUrl":"…"` / `"ind":N` pairs.
 /// Returns pages in source order (the `ind` ordering); the caller is
-/// responsible for de-duping and clamping to `page_count`.
+/// responsible for de-duping the entries.
 fn extract_image_url_ind_pairs(payload: &str) -> Vec<(i32, String)> {
     let bytes = payload.as_bytes();
     let needle = b"\"imageUrl\":\"";
@@ -245,16 +237,18 @@ fn extract_image_url_ind_pairs(payload: &str) -> Vec<(i32, String)> {
 }
 
 /// Sort by `ind`, dedupe identical URLs (Next.js occasionally re-emits the
-/// same page across chunks), and clamp to `page_count`.
-fn dedup_preserving_order(entries: Vec<(i32, String)>, page_count: i32) -> Vec<String> {
+/// same page across chunks), and surface every unique page.
+///
+/// The page count widget is ignored here on purpose: rouman5 frequently
+/// ships a stale or partial count (e.g. `1/73` for a chapter that actually
+/// spans well past 73), and clamping to the widget dropped real pages
+/// while still surfacing unrelated artwork.
+fn dedup_preserving_order(entries: Vec<(i32, String)>) -> Vec<String> {
     let mut seen: Vec<String> = Vec::with_capacity(entries.len());
     for (_, url) in entries {
         if !seen.contains(&url) {
             seen.push(url);
         }
-    }
-    if page_count > 0 && seen.len() > page_count as usize {
-        seen.truncate(page_count as usize);
     }
     seen
 }
