@@ -1,36 +1,30 @@
 //! Chapter page parsing.
 //!
-//! Chapter HTML on rouman5.com carries the page list in two places:
+//! Chapter HTML on rouman5.com embeds the page list in its Next.js RSC
+//! streaming payload — a series of `<script>self.__next_f.push([1,"…"])`
+//! `</script>` chunks. Once unescaped and concatenated, the payload
+//! contains `"imageUrl":"…"` / `"ind":N` pairs that list every page.
 //!
-//! 1. A small `<div class="text-muted-foreground text-right mr-4">N頁</div>`
-//!    widget above the image grid, which directly states the page count.
-//! 2. The Next.js RSC streaming payload, shipped as a series of
-//!    `<script>self.__next_f.push([1,"…"])</script>` chunks. Once
-//!    unescaped and concatenated, the payload contains `"imageUrl":"…"`
-//!    / `"ind":N` pairs that list every page.
-//!
-//! The page count widget is fetched for symmetry with the source's other
-//! callers but is no longer used to truncate the page list — the site
-//! regularly emits a stale widget count (e.g. `1/73` for a chapter that
-//! actually has 128 pages), and clamping to the widget drops real pages
-//! while leaving related-manga cards behind. The page list is reassembled
-//! purely from (2).
+//! The chapter detail page *also* renders a `<div … text-right mr-4>1/N頁</div>`
+//! widget above the image grid, but the value it carries is regularly
+//! stale (e.g. the chapter 0 widget says 73 while the RSC actually carries
+//! 128 unique imageUrl/ind pairs). Earlier revisions read that widget and
+//! used its N to truncate the page list, which dropped real pages while
+//! still surfacing unrelated artwork. We now ignore the widget entirely
+//! and derive the page list purely from the RSC payload.
 
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format};
 use aidoku::imports::html::Html;
 use aidoku::{HashMap, Page, PageContent, PageContext, Result};
 
-pub(crate) fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
-    let doc = Html::parse(html)?;
-
-    let page_count = page_count_from_dom(&doc).unwrap_or(0);
-
+pub(crate) fn parse_chapter_pages(html: &str) -> Result<Vec<String>> {
     // The RSC payload lives in <script>self.__next_f.push([1,"…"])</script>
     // chunks. Iterate every <script>, grab its body, and accumulate the
     // chunks whose body starts with the Next.js marker. Strings inside the
     // chunks are JSON-escaped ("\"", "\\", "\n", …), so we unescape them as
     // we concatenate so the downstream imageUrl/ind scan sees clean JSON.
+    let doc = Html::parse(html)?;
     let mut payload = String::new();
     if let Some(scripts) = doc.select("script") {
         for script in scripts {
@@ -53,9 +47,10 @@ pub(crate) fn parse_chapter_pages(html: &str) -> Result<(i32, Vec<String>)> {
         }
     }
 
-    // Extract (imageUrl, ind) pairs from the concatenated payload.
+    // Extract (imageUrl, ind) pairs from the concatenated payload and dedupe
+    // by URL. The deduped list is the chapter's real page count.
     let entries = extract_image_url_ind_pairs(&payload);
-    Ok((page_count, dedup_preserving_order(entries)))
+    Ok(dedup_preserving_order(entries))
 }
 
 /// Resolve a chapter path into an absolute URL.
@@ -100,28 +95,6 @@ pub(crate) fn build_pages(urls: Vec<(String, bool)>) -> Vec<Page> {
             }
         })
         .collect()
-}
-
-/// Page count is exposed by the site as `<div … text-right mr-4>1/N頁</div>`.
-/// Re-read it through the HTML parser; SwiftSoup's `.text()` collapses the
-/// surrounding `<!-- -->` comments that split the digits in the rendered DOM.
-pub(crate) fn page_count_from_dom(doc: &aidoku::imports::html::Document) -> Option<i32> {
-    let el = doc.select_first("div.text-muted-foreground.text-right.mr-4")?;
-    let text = el.text()?;
-    let mut current = String::new();
-    let mut last = None;
-    for c in text.chars() {
-        if c.is_ascii_digit() {
-            current.push(c);
-        } else if !current.is_empty() {
-            last = current.parse::<i32>().ok();
-            current.clear();
-        }
-    }
-    if !current.is_empty() {
-        last = current.parse::<i32>().ok();
-    }
-    last
 }
 
 /// Strip the `self.__next_f.push([1,"…"])` wrapper from a single RSC chunk

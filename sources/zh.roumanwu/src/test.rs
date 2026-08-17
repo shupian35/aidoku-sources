@@ -7,7 +7,7 @@ use aidoku::{
 use aidoku_test::aidoku_test;
 
 use super::Roumanwu;
-use crate::chapter::{build_pages, page_count_from_dom, parse_chapter_pages, resolve_chapter_url};
+use crate::chapter::{build_pages, parse_chapter_pages, resolve_chapter_url};
 use crate::detail::{decode_entities, json_top_level_string, manga_status_from_text};
 use crate::image::{scramble_slices, unscramble_image_url};
 use crate::listing::{extract_manga_cards, has_next_page_from_html};
@@ -297,48 +297,18 @@ fn chapter_url_is_absolute() {
 }
 
 #[aidoku_test]
-fn page_count_from_dom_reads_widget() {
-    // Site renders the page count as `<div … text-right mr-4>1<!-- -->/<!-- -->73<!-- -->頁</div>`.
-    // SwiftSoup collapses the HTML comments and trims whitespace, so the
-    // resulting text is "1/73頁".
-    let html = r#"
-        <html><body>
-                <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->73<!-- -->頁</div>
-            </body></html>
-    "#;
-    let doc = aidoku::imports::html::Html::parse(html).unwrap();
-    assert_eq!(page_count_from_dom(&doc), Some(73));
-}
-
-#[aidoku_test]
-fn page_count_from_dom_handles_multi_digit_count() {
-    let html = r#"<div class="text-muted-foreground text-right mr-4">5<!-- -->/<!-- -->123<!-- -->頁</div>"#;
-    let doc = aidoku::imports::html::Html::parse(html).unwrap();
-    assert_eq!(page_count_from_dom(&doc), Some(123));
-}
-
-#[aidoku_test]
-fn page_count_from_dom_returns_none_without_widget() {
-    let html = r#"<html><body><p>no count widget</p></body></html>"#;
-    let doc = aidoku::imports::html::Html::parse(html).unwrap();
-    assert_eq!(page_count_from_dom(&doc), None);
-}
-
-#[aidoku_test]
 fn parse_chapter_pages_reassembles_from_rsc_scripts() {
-    // Build a chapter HTML carrying the page count widget + a couple of RSC
-    // script tags. Each script contains the Next.js push pattern; together
-    // their unescaped payload should yield every imageUrl / ind pair.
+    // Build a chapter HTML with a couple of RSC script tags. Each script
+    // contains the Next.js push pattern; together their unescaped payload
+    // should yield every imageUrl / ind pair.
     let html = r#"
         <html><body>
-            <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->2<!-- -->頁</div>
             <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn1.xyz/p0.jpg\",\"ind\":0}"])</script>
             <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn2.xyz/p1.jpg\",\"ind\":1}"])</script>
             <script>other()</script>
         </body></html>
     "#;
-    let (count, urls) = parse_chapter_pages(html).expect("parse");
-    assert_eq!(count, 2);
+    let urls = parse_chapter_pages(html).expect("parse");
     assert_eq!(
         urls,
         vec![
@@ -355,13 +325,11 @@ fn parse_chapter_pages_drops_corrupted_urls() {
     // the host aborts the rest of the chapter.
     let html = r#"
         <html><body>
-            <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->2<!-- -->頁</div>
             <script>self.__next_f.push([1,"{\"imageUrl\":\"https\",\"ind\":0}"])</script>
             <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn2.xyz/p1.jpg\",\"ind\":1}"])</script>
         </body></html>
     "#;
-    let (count, urls) = parse_chapter_pages(html).expect("parse");
-    assert_eq!(count, 2);
+    let urls = parse_chapter_pages(html).expect("parse");
     assert_eq!(urls.len(), 1);
     assert_eq!(urls[0], "https://r5.rmcdn2.xyz/p1.jpg");
 }
@@ -370,9 +338,8 @@ fn parse_chapter_pages_drops_corrupted_urls() {
 fn parse_chapter_pages_ignores_stale_widget_count() {
     // Regression: the chapter detail page's "1/N頁" widget frequently
     // ships a stale page count (e.g. the chapter actually has 128 pages but
-    // the widget says 73). Clamping to the widget dropped real pages; the
-    // page list must surface every deduped URL that the RSC exposes even
-    // when the widget is significantly shorter than the payload.
+    // the widget says 73). The page list is the deduped RSC payload, so
+    // every URL must surface even when the widget is significantly shorter.
     let html = r#"
         <html><body>
             <div class="text-muted-foreground text-right mr-4">1<!-- -->/<!-- -->2<!-- -->頁</div>
@@ -382,10 +349,9 @@ fn parse_chapter_pages_ignores_stale_widget_count() {
             <script>self.__next_f.push([1,"{\"imageUrl\":\"https://r5.rmcdn4.xyz/p3.jpg\",\"ind\":3}"])</script>
         </body></html>
     "#;
-    let (count, urls) = parse_chapter_pages(html).expect("parse");
+    let urls = parse_chapter_pages(html).expect("parse");
     // The widget says 2 but the RSC actually has 4 pages; we must surface
-    // all 4 rather than clamping to the widget.
-    assert_eq!(count, 2);
+    // all 4 since the page count is now derived from the RSC payload.
     assert_eq!(urls.len(), 4);
 }
 

@@ -77,14 +77,11 @@ impl Source for Roumanwu {
             .clone()
             .unwrap_or_else(|| format!("/books/{}/{}", manga.key, chapter.key));
         let html = html_get_string(&resolve_chapter_url(&path, &get_base_url()))?;
-        // The (page_count, urls) pair carries the widget count for symmetry
-        // with other rouman5 scrapers, but we deliberately ignore the widget
-        // count here: the page count the chapter detail page advertises is
-        // frequently stale (e.g. `1/73` for a chapter with 128 pages), and
-        // clamping to it dropped real pages while leaving related-manga
-        // cards in the list. `urls` is already deduped in
-        // `parse_chapter_pages`, so we just emit every page it surfaces.
-        let (_page_count, urls) = parse_chapter_pages(&html)?;
+        // The page count is the length of the deduped URL list straight from
+        // the RSC payload — the chapter detail page's "1/N頁" widget is
+        // regularly stale (e.g. it says 73 while the RSC actually carries
+        // 128 unique imageUrl/ind pairs), so we deliberately ignore it.
+        let urls = parse_chapter_pages(&html)?;
         let tagged = urls
             .into_iter()
             .map(|u| (u.clone(), unscramble_image_url(&u)))
