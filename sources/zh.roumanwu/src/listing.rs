@@ -29,7 +29,7 @@ use crate::source_url::get_base_url;
 /// </div></a>`. Title comes from the `<h3>` (preferring its `title` attribute
 /// so we don't pick up whitespace), cover from the `img[src]`, latest
 /// chapter text from `span.site-comic-chapter`, and tags from the second
-/// `<div class="site-comic-meta">` (region + views).
+/// `<div class="site-comic-meta">` (`["地区 REGION", "浏览 ◉ N"]`).
 pub(crate) fn extract_manga_cards(html: &str) -> Result<Vec<Manga>> {
     let doc = Html::parse(html)?;
     let anchors = match doc.select("a[href^=\"/books/\"]") {
@@ -83,7 +83,8 @@ pub(crate) fn extract_manga_cards(html: &str) -> Result<Vec<Manga>> {
         // Stats: pull every <span> inside the last `div.site-comic-meta`
         // block. The site renders region + views there; some search results
         // leave the views span empty, so we accept the row as long as the
-        // region span is populated.
+        // region span is populated. The pair maps to `["地区 REGION",
+        // "浏览 ◉ N"]` (region-only when views is missing).
         let tags: Option<Vec<String>> = a
             .select("div.site-comic-meta")
             .and_then(|list| list.into_iter().last())
