@@ -163,8 +163,8 @@ impl DynamicSettings for Roumanwu {
             .into(),
             aidoku::LinkSetting {
                 key: "address_link".into(),
-                title: "地址发布：https://rdz3.xyz/dizhi".into(),
-                url: "https://rdz3.xyz/dizhi".into(),
+                title: "地址发布：https://rdz4.xyz/dizhi".into(),
+                url: "https://rdz4.xyz/dizhi".into(),
                 external: Some(true),
                 ..Default::default()
             }

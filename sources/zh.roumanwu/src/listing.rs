@@ -1,10 +1,11 @@
 //! Listing / search page parsing.
 //!
 //! The site's listing, search, and home-page sections all render manga cards
-//! with the same DOM. `extract_manga_cards` parses that shared shape and is
-//! reused by both `parse_manga_listing` (here) and `parse_home_layout` in
-//! `home.rs`. Pagination is inferred from the presence of a `page=N+1` link
-//! or a "下一頁" / "Next" marker; that marker only matters for listing pages.
+//! with the same DOM (`<a class="site-comic" href="/books/{key}">…</a>`).
+//! `extract_manga_cards` parses that shared shape and is reused by both
+//! `parse_manga_listing` (here) and `parse_home_layout` in `home.rs`.
+//! Pagination is inferred from the presence of a `page=N+1` link or a
+//! "下一頁" marker; that marker only matters for listing pages.
 
 use aidoku::alloc::string::ToString;
 use aidoku::alloc::{String, Vec, format, vec};
@@ -12,7 +13,6 @@ use aidoku::imports::html::Html;
 use aidoku::{ContentRating, Manga, MangaPageResult, Result, Viewer};
 
 use crate::source_url::get_base_url;
-use crate::utils::extract_url_from_style;
 
 /// Extract every manga card from a chunk of HTML.
 ///
@@ -20,6 +20,16 @@ use crate::utils::extract_url_from_style;
 /// anchors carry three `/` segments), dedupes by `key`, and ignores entries
 /// with no resolvable title. Both listing pages and home-page sections call
 /// this with their respective HTML slices.
+///
+/// The new site renders each card as
+/// `<a class="site-comic" href="/books/{key}"><div class="site-comic-cover">
+/// <img src="…"></div><h3 title="…">…</h3><div class="site-comic-meta">
+/// <span class="site-comic-chapter">…</span><span class="shrink-0">…</span>
+/// </div><div class="site-comic-meta"><span>REGION</span><span>◉ N</span>
+/// </div></a>`. Title comes from the `<h3>` (preferring its `title` attribute
+/// so we don't pick up whitespace), cover from the `img[src]`, latest
+/// chapter text from `span.site-comic-chapter`, and tags from the second
+/// `<div class="site-comic-meta">` (region + views).
 pub(crate) fn extract_manga_cards(html: &str) -> Result<Vec<Manga>> {
     let doc = Html::parse(html)?;
     let anchors = match doc.select("a[href^=\"/books/\"]") {
@@ -47,53 +57,56 @@ pub(crate) fn extract_manga_cards(html: &str) -> Result<Vec<Manga>> {
             continue;
         }
         let title = a
-            .select_first("div.truncate.text-foreground, div.line-clamp-2")
-            .or_else(|| a.select_first("div[class*=\"text-foreground\"]"))
+            .select_first("h3[title]")
+            .and_then(|e| e.attr("title"))
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .or_else(|| {
+                a.select_first("h3")
+                    .and_then(|e| e.text())
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty())
+            });
+        let Some(title) = title else { continue };
+        let cover = a
+            .select_first("div.site-comic-cover > img[src]")
+            .and_then(|img| img.attr("src"));
+        // Latest chapter label (e.g. "第8話 8"). Search pages carry a
+        // category here ("Sanku", "Room308") instead; we still surface it
+        // as the description so the app's listing cards aren't empty.
+        let latest = a
+            .select_first("span.site-comic-chapter")
             .and_then(|e| e.text())
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty());
-        let Some(title) = title else { continue };
-        let cover = a
-            .select_first("div[style*=\"background-image\"]")
-            .and_then(|d| d.attr("style"))
-            .and_then(|s| extract_url_from_style(&s));
-        // Latest chapter ("至: 第N話-..."). Search pages don't carry this
-        // line, so it stays None there.
-        let latest = a.select("div.text-muted-foreground").and_then(|list| {
-            let mut found = None;
-            for e in list {
-                if let Some(t) = e.text() {
-                    let t = t.trim().to_string();
-                    if !t.is_empty() && t.contains("至") {
-                        found = Some(t);
-                        break;
-                    }
-                }
-            }
-            found
-        });
 
-        // Stats row: views, favorites, last-updated (in DOM order). Search
-        // pages only show the date, so require all three before tagging.
-        let stats: Vec<String> = a
-            .select("div.text-xs.text-muted-foreground")
-            .map(|list| {
-                list.into_iter()
-                    .filter_map(|e| e.text())
+        // Stats: pull every <span> inside the last `div.site-comic-meta`
+        // block. The site renders region + views there; some search results
+        // leave the views span empty, so we accept the row as long as the
+        // region span is populated.
+        let tags: Option<Vec<String>> = a
+            .select("div.site-comic-meta")
+            .and_then(|list| list.into_iter().last())
+            .and_then(|row| row.select("span"))
+            .map(|spans| {
+                spans
+                    .into_iter()
+                    .filter_map(|s| s.text())
                     .map(|t| t.trim().to_string())
-                    .filter(|t| !t.is_empty() && !t.contains("至"))
-                    .collect()
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<String>>()
             })
-            .unwrap_or_default();
-        let tags: Option<Vec<String>> = if stats.len() >= 3 {
-            Some(vec![
-                format!("浏览 {}", stats[0]),
-                format!("收藏 {}", stats[1]),
-                format!("更新 {}", stats[2]),
-            ])
-        } else {
-            None
-        };
+            .and_then(|spans| {
+                let region = spans.first().cloned();
+                let views = spans.get(1).cloned();
+                match (region, views) {
+                    (Some(r), Some(v)) if !r.is_empty() && !v.is_empty() => {
+                        Some(vec![format!("地区 {}", r), format!("浏览 {}", v)])
+                    }
+                    (Some(r), None) if !r.is_empty() => Some(vec![format!("地区 {}", r)]),
+                    _ => None,
+                }
+            });
 
         seen.push(key.clone());
         entries.push(Manga {

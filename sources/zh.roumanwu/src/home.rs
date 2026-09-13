@@ -1,9 +1,11 @@
 //! Home page parsing.
 //!
 //! The rouman5.com home page is rendered server-side as a vertical stack of
-//! sections. Each section starts with a `text-2xl` title div (matching one
-//! of the known titles in `HOME_SECTIONS`) and is followed — possibly after
-//! an ad-slot div — by a `grid` div holding the section's manga anchors.
+//! `<div class="site-home-section">` blocks. Each section starts with a
+//! `<div class="site-section-heading"><h1|2>TITLE</h1|2><p>SUBTITLE</p></div>`
+//! heading (the title element we match against `HOME_SECTIONS`) and is
+//! followed — possibly after an ad-slot div — by a
+//! `<div class="site-comic-grid">` holding the section's manga anchors.
 //!
 //! Each section's title element lives inside the section's wrapper div; the
 //! manga grid is the last child div of that wrapper. We locate the title
@@ -32,7 +34,7 @@ type SectionSpec = (
 
 const HOME_SECTIONS: &[SectionSpec] = &[
     (
-        &["正熱門"],
+        &["此刻，正熱門"],
         &["當下超高人氣作品"],
         HomeSectionKind::BigScroller,
     ),
@@ -60,7 +62,7 @@ const HOME_SECTIONS: &[SectionSpec] = &[
             page_size: 3,
         },
     ),
-    (&["已完結"], &["完結精選"], HomeSectionKind::Scroller),
+    (&["一口氣讀完"], &["完結精選"], HomeSectionKind::Scroller),
 ];
 
 pub(crate) fn parse_home_layout(html: &str) -> Result<HomeLayout> {
@@ -115,12 +117,13 @@ pub(crate) fn parse_home_layout(html: &str) -> Result<HomeLayout> {
 
 // ---------- Helpers ----------
 
-/// Find the first `div.text-2xl` whose trimmed text matches one of the
-/// supplied title aliases. SwiftSoup's `:matches(REGEX)` would do this in a
-/// single query, but anchoring on the class is more robust to future site
-/// edits that add new sections with new titles.
+/// Find the first `<h1>` or `<h2>` inside `div.site-section-heading` whose
+/// trimmed text matches one of the supplied title aliases. SwiftSoup's
+/// `:matches(REGEX)` would do this in a single query, but anchoring on the
+/// `site-section-heading` wrapper is more robust to future site edits that
+/// add new sections with new titles.
 fn find_title_element(doc: &Document, aliases: &[&str]) -> Option<Element> {
-    let list = doc.select("div.text-2xl")?;
+    let list = doc.select("div.site-section-heading h1, div.site-section-heading h2")?;
     for el in list {
         if let Some(t) = el.text() {
             let trimmed = t.trim();

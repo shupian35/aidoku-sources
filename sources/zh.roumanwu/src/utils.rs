@@ -4,7 +4,7 @@
 //! knowledge about rouman5.com specifically (HTTP fetching, page-index
 //! conventions, DOM selectors, etc.) belongs in lib.rs instead.
 
-use aidoku::alloc::{String, Vec, string::ToString};
+use aidoku::alloc::{String, Vec};
 
 // ---------- Encoding / hashing ----------
 
@@ -26,14 +26,6 @@ pub(crate) fn urlencode(s: &str) -> String {
 
 pub(crate) fn site_page(page: i32) -> i32 {
     if page < 1 { 0 } else { page - 1 }
-}
-
-pub(crate) fn extract_url_from_style(style: &str) -> Option<String> {
-    let s = style.replace("&quot;", "\"");
-    let start = s.find("url(\"")? + 5;
-    let rest = &s[start..];
-    let end = rest.find(0x22 as char)?;
-    Some(rest[..end].to_string())
 }
 
 // ---------- MD5 ----------
