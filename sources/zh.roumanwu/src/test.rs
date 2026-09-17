@@ -335,6 +335,93 @@ fn parse_chapter_pages_ignores_stale_widget_count() {
 }
 
 #[aidoku_test]
+fn parse_chapter_pages_reads_image_paths_array() {
+    // The current rouman5.com chapter HTML ships the page list as a single
+    // inline `<script>` whose body uses `$R[N]=[…]` reference slots and
+    // exposes the URLs as `imagePaths:["…","…",…]`. Entries are JSON-escaped
+    // strings in source order — no RSC streaming involved.
+    let html = r#"
+        <html><body>
+            <script>
+                (self.$R=self.$R||{})["tsr"]=[];
+                book:$R[25]={id:"x"};
+                chapter:{id:"y",ind:0},current:0,total:2,
+                imagePaths:$R[27]=[
+                    "https://v1.kelv47.xyz/m/a/wm:0/sr:1/czM6Ly9…/p1.jpg",
+                    "https://v2.kelv47.xyz/m/b/wm:2/sr:0/czM6Ly9…/p2.jpg"
+                ]
+            </script>
+        </body></html>
+    "#;
+    let urls = parse_chapter_pages(html).expect("parse");
+    assert_eq!(urls.len(), 2);
+    assert_eq!(
+        urls[0],
+        "https://v1.kelv47.xyz/m/a/wm:0/sr:1/czM6Ly9…/p1.jpg"
+    );
+    assert_eq!(
+        urls[1],
+        "https://v2.kelv47.xyz/m/b/wm:2/sr:0/czM6Ly9…/p2.jpg"
+    );
+}
+
+#[aidoku_test]
+fn parse_chapter_pages_dedupes_image_paths_array() {
+    // Duplicates in the `imagePaths` array (the site occasionally re-emits
+    // the same page) must collapse to a single entry.
+    let html = r#"
+        <html><body>
+            <script>
+                imagePaths:["https://v1.kelv47.xyz/a.jpg","https://v1.kelv47.xyz/a.jpg","https://v1.kelv47.xyz/b.jpg"]
+            </script>
+        </body></html>
+    "#;
+    let urls = parse_chapter_pages(html).expect("parse");
+    assert_eq!(urls.len(), 2);
+    assert_eq!(urls[0], "https://v1.kelv47.xyz/a.jpg");
+    assert_eq!(urls[1], "https://v1.kelv47.xyz/b.jpg");
+}
+
+#[aidoku_test]
+fn parse_chapter_pages_drops_corrupted_image_paths() {
+    // A truncated entry (the array got chunked mid-string) must be filtered;
+    // otherwise the chapter would fail to load that page and the host
+    // aborts the rest of the chapter.
+    let html = r#"
+        <html><body>
+            <script>
+                imagePaths:["https","https://v2.kelv47.xyz/p1.jpg"]
+            </script>
+        </body></html>
+    "#;
+    let urls = parse_chapter_pages(html).expect("parse");
+    assert_eq!(urls.len(), 1);
+    assert_eq!(urls[0], "https://v2.kelv47.xyz/p1.jpg");
+}
+
+#[aidoku_test]
+fn parse_chapter_pages_falls_back_to_rsc_when_no_image_paths() {
+    // When a payload has only the legacy RSC chunks (e.g. a third-party
+    // mirror that hasn't migrated), the parser must still surface pages.
+    // This pins that the new-format check runs first but doesn't suppress
+    // the RSC fallback.
+    let html = r#"
+        <html><body>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://v1.kelv47.xyz/p0.jpg\",\"ind\":0}"])</script>
+            <script>self.__next_f.push([1,"{\"imageUrl\":\"https://v2.kelv47.xyz/p1.jpg\",\"ind\":1}"])</script>
+        </body></html>
+    "#;
+    let urls = parse_chapter_pages(html).expect("parse");
+    assert_eq!(
+        urls,
+        vec![
+            String::from("https://v1.kelv47.xyz/p0.jpg"),
+            String::from("https://v2.kelv47.xyz/p1.jpg"),
+        ]
+    );
+}
+
+#[aidoku_test]
 fn get_page_list_returns_many_pages() {
     let s = new_source();
     let manga = Manga {
