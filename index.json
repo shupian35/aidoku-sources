@@ -2,11 +2,11 @@
   "name": "Aidoku Sources",
   "sources": [
     {
-      "id": "zh.jmcomic",
-      "name": "JM Comic",
-      "version": 2,
-      "iconURL": "icons/zh.jmcomic-v2.png",
-      "downloadURL": "sources/zh.jmcomic-v2.aix",
+      "id": "zh.jmaura",
+      "name": "JM Aura",
+      "version": 3,
+      "iconURL": "icons/zh.jmaura-v3.png",
+      "downloadURL": "sources/zh.jmaura-v3.aix",
       "languages": [
         "zh"
       ],
