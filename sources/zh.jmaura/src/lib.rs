@@ -122,7 +122,7 @@ impl Source for JmAura {
 			}
 			manga.status = MangaStatus::Completed;
 			manga.content_rating = ContentRating::NSFW;
-			manga.viewer = Viewer::RightToLeft;
+			manga.viewer = viewer_for(&comic.tags);
 			manga.url = Some(api::album_url(&comic.comic_id));
 		}
 
@@ -481,6 +481,23 @@ register_source!(
 
 // ---------- Mapping helpers ----------
 
+/// Chooses the reading direction from the album's tags.
+///
+/// The catalogue is overwhelmingly paged manga, but Korean titles (tagged
+/// 韓漫) are webtoons: their pages are tall vertical strips rather than
+/// frames of equal aspect, and paging through them right-to-left mangles the
+/// layout. Both the traditional and simplified spellings are accepted because
+/// the tag comes from upstream and is not normalised.
+fn viewer_for(tags: &[String]) -> Viewer {
+	const WEBTOON_TAGS: [&str; 2] = ["韓漫", "韩漫"];
+	let is_webtoon = tags.iter().any(|tag| WEBTOON_TAGS.contains(&tag.trim()));
+	if is_webtoon {
+		Viewer::Webtoon
+	} else {
+		Viewer::RightToLeft
+	}
+}
+
 fn summary_to_manga(summary: &api::Summary) -> Manga {
 	let key = summary.comic_id.clone();
 	Manga {
@@ -495,7 +512,7 @@ fn summary_to_manga(summary: &api::Summary) -> Manga {
 		tags: Some(summary.tags.clone()),
 		url: Some(api::album_url(&key)),
 		content_rating: ContentRating::NSFW,
-		viewer: Viewer::RightToLeft,
+		viewer: viewer_for(&summary.tags),
 		..Default::default()
 	}
 }
@@ -506,6 +523,14 @@ fn summary_to_link(summary: &api::Summary) -> Link {
 
 fn latest_to_manga(item: &api::LatestItem) -> Manga {
 	let key = item.id.clone();
+	// This surface carries the album's category rather than its tags, so the
+	// viewer can only be as good as that one value; `get_manga_update`
+	// corrects it from the full tag list.
+	let tags: Vec<String> = item
+		.category
+		.as_ref()
+		.map(|category| vec![category.title.clone()])
+		.unwrap_or_default();
 	Manga {
 		key: key.clone(),
 		title: item.name.clone(),
@@ -515,13 +540,10 @@ fn latest_to_manga(item: &api::LatestItem) -> Manga {
 			.as_ref()
 			.filter(|author| !author.is_empty())
 			.map(|author| vec![author.clone()]),
-		tags: item
-			.category
-			.as_ref()
-			.map(|category| vec![category.title.clone()]),
+		tags: Some(tags.clone()),
 		url: Some(api::album_url(&key)),
 		content_rating: ContentRating::NSFW,
-		viewer: Viewer::RightToLeft,
+		viewer: viewer_for(&tags),
 		..Default::default()
 	}
 }

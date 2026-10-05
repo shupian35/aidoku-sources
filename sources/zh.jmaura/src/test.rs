@@ -6,12 +6,14 @@
 //! The session-cookie handling for the secondary catalogue is covered too:
 //! it cannot be exercised without an account, so the parsing is pinned here.
 
+use aidoku::Viewer;
 use aidoku::alloc::{String, format, vec::Vec};
 use aidoku_test::aidoku_test;
 
 use crate::flavor::{cookie_pair, escape};
 use crate::md5;
 use crate::scramble::strip_count;
+use crate::viewer_for;
 
 fn hex_of(data: &[u8]) -> String {
 	let bytes = md5::hex(data);
@@ -177,4 +179,29 @@ fn escape_protects_the_login_body() {
 	assert_eq!(escape("back\\slash"), "back\\\\slash");
 	assert_eq!(escape("line\nbreak"), "line break");
 	assert_eq!(escape("plain-password-123"), "plain-password-123");
+}
+
+#[aidoku_test]
+fn korean_titles_read_as_webtoons() {
+	// The real tag list of album 1325035, which is a Korean webtoon: its
+	// pages are 720x3600 vertical strips, not paged frames.
+	let tags: Vec<String> = ["韓漫", "後宮", "喜劇", "日常", "機翻", "中文"]
+		.iter()
+		.map(|tag| String::from(*tag))
+		.collect();
+	assert_eq!(viewer_for(&tags), Viewer::Webtoon);
+
+	// Both spellings, since upstream does not normalise the tag.
+	assert_eq!(viewer_for(&[String::from("韩漫")]), Viewer::Webtoon);
+	assert_eq!(viewer_for(&[String::from(" 韓漫 ")]), Viewer::Webtoon);
+}
+
+#[aidoku_test]
+fn other_titles_keep_the_paged_viewer() {
+	let tags: Vec<String> = ["同人", "後宮", "重口"]
+		.iter()
+		.map(|tag| String::from(*tag))
+		.collect();
+	assert_eq!(viewer_for(&tags), Viewer::RightToLeft);
+	assert_eq!(viewer_for(&[]), Viewer::RightToLeft);
 }
