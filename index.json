@@ -4,9 +4,9 @@
     {
       "id": "zh.jmaura",
       "name": "JM Aura",
-      "version": 3,
-      "iconURL": "icons/zh.jmaura-v3.png",
-      "downloadURL": "sources/zh.jmaura-v3.aix",
+      "version": 4,
+      "iconURL": "icons/zh.jmaura-v4.png",
+      "downloadURL": "sources/zh.jmaura-v4.aix",
       "languages": [
         "zh"
       ],
