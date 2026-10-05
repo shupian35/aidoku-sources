@@ -395,7 +395,21 @@ impl ImageRequestProvider for JmComic {
 	}
 }
 
-register_source!(JmComic);
+// Every optional trait implemented above must be listed here by name: the
+// macro only exports a handler for the traits passed to it, so an omission
+// fails silently at runtime and `aidoku verify` cannot catch it (it only
+// checks the three mandatory functions). Verify the export list after any
+// change, e.g. by grepping the built wasm for the handler symbols.
+register_source!(
+	JmComic,
+	ListingProvider,
+	Home,
+	DynamicFilters,
+	DynamicSettings,
+	DeepLinkHandler,
+	PageImageProcessor,
+	ImageRequestProvider
+);
 
 // ---------- Mapping helpers ----------
 
