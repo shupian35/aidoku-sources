@@ -1,0 +1,32 @@
+{
+	"info": {
+		"id": "zh.jmcomic",
+		"name": "JM Comic",
+		"version": 1,
+		"url": "https://web.jmcomic.uk",
+		"urls": [
+			"https://web.jmcomic.uk"
+		],
+		"contentRating": 2,
+		"languages": [
+			"zh"
+		]
+	},
+	"listings": [
+		{
+			"id": "latest",
+			"name": "最新上架"
+		},
+		{
+			"id": "leaderboard",
+			"name": "排行榜"
+		},
+		{
+			"id": "random",
+			"name": "随机漫游"
+		}
+	],
+	"config": {
+		"allowsBaseUrlSelect": true
+	}
+}
