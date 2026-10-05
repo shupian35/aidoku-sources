@@ -23,7 +23,7 @@ mod source_url;
 #[cfg(test)]
 mod test;
 
-use scramble::{CTX_ALBUM, CTX_NAME, CTX_SCRAMBLE};
+use scramble::{CTX_CHAPTER, CTX_NAME, CTX_SCRAMBLE};
 use source_url::{BASE_URL, get_base_url, image_request};
 
 /// The `category` value that means "no category filter".
@@ -172,20 +172,23 @@ impl Source for JmAura {
 			return Ok(Vec::new());
 		}
 
-		let album = data.album_id().to_string();
+		// `/api/chapter_image/<id>/<name>` selects the *chapter*, not the album.
+		// Every chapter of an album numbers its pages from `00001.webp`, so
+		// passing the album id here serves the album's first chapter for all of
+		// them. The strip count is seeded from this same id, which is why the
+		// two have to stay in step.
+		let chapter_id = chapter.key.clone();
 		let scramble = data.scramble_id().to_string();
 		let base = get_base_url();
 
 		let mut pages = Vec::with_capacity(names.len());
 		for name in names {
 			let mut context = PageContext::default();
-			// The strip count and the image path are both derived from the album
-			// id, so the processor needs it alongside the scramble id.
-			context.insert(String::from(CTX_ALBUM), album.clone());
+			context.insert(String::from(CTX_CHAPTER), chapter_id.clone());
 			context.insert(String::from(CTX_SCRAMBLE), scramble.clone());
 			context.insert(String::from(CTX_NAME), name.clone());
 
-			let url = format!("{}/api/chapter_image/{}/{}", base, album, name);
+			let url = format!("{}/api/chapter_image/{}/{}", base, chapter_id, name);
 			pages.push(Page {
 				content: PageContent::url_context(url, context),
 				..Default::default()

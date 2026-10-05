@@ -71,6 +71,32 @@ fn strip_count_matches_measured_pages() {
 }
 
 #[aidoku_test]
+fn strip_count_is_seeded_by_the_chapter_not_the_album() {
+	// Album 1325035 has 36 chapters. Its first chapter shares the album id,
+	// so the two coincide there and a mistake stays invisible; the later
+	// chapters are where it shows. These are the counts measured from the real
+	// page images: using the album id for any of them re-serves chapter one.
+	assert_eq!(strip_count(1_325_035, "220980", "00001"), 10);
+	assert_eq!(strip_count(1_472_417, "220980", "00001"), 8);
+	assert_eq!(strip_count(1_472_418, "220980", "00001"), 14);
+}
+
+#[aidoku_test]
+fn strip_count_differs_across_chapters_of_one_album() {
+	// A regression guard for the chapter/album mix-up: if these ever collapse
+	// to one value, the seed is no longer using the chapter id.
+	let counts: Vec<usize> = [1_325_035u64, 1_472_417, 1_472_418, 1_472_419, 1_472_420]
+		.iter()
+		.map(|id| strip_count(*id, "220980", "00001"))
+		.collect();
+	let first = counts[0];
+	assert!(
+		counts.iter().any(|count| *count != first),
+		"every chapter of the album produced the same count: {counts:?}"
+	);
+}
+
+#[aidoku_test]
 fn strip_count_always_yields_an_even_positive_number() {
 	for album in [
 		300_000u64, 400_000, 422_866, 500_000, 900_000, 1_114_751, 1_500_000,

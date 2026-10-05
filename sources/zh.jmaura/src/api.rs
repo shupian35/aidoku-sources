@@ -124,10 +124,14 @@ pub(crate) struct PageEntry {
 	pub name: String,
 }
 
+/// The unparsed part of a chapter payload.
+///
+/// `album_id` is deliberately not exposed: it identifies the album, but the
+/// image path and the de-scramble formula both key off the *chapter* id, which
+/// the caller already holds as `Chapter::key`. Reading the album id here is how
+/// every chapter of a multi-chapter album ends up serving chapter one.
 #[derive(Deserialize, Default)]
 struct ChapterRaw {
-	#[serde(default, deserialize_with = "flex_string")]
-	album_id: String,
 	#[serde(default, deserialize_with = "flex_string")]
 	scramble_id: String,
 	#[serde(default, deserialize_with = "flex_string_list")]
@@ -143,10 +147,6 @@ pub(crate) struct ChapterPages {
 }
 
 impl ChapterPages {
-	pub(crate) fn album_id(&self) -> &str {
-		&self.raw.album_id
-	}
-
 	pub(crate) fn scramble_id(&self) -> &str {
 		&self.raw.scramble_id
 	}

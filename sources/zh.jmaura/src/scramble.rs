@@ -16,37 +16,41 @@ use aidoku::{
 use crate::md5;
 
 /// Page context keys consumed by [`unscramble`].
-pub(crate) const CTX_ALBUM: &str = "album";
+pub(crate) const CTX_CHAPTER: &str = "chapter";
 pub(crate) const CTX_SCRAMBLE: &str = "scramble";
 pub(crate) const CTX_NAME: &str = "name";
 
 /// The band count the site would use for a given page.
 ///
-/// Mirrors the reader's own helper: bands only exist for albums above the
-/// scramble threshold, the seed is `album id + file stem`, and the band count
-/// is read out of character 31 of the *hex* digest — an ASCII code, not a
-/// decoded byte.
-pub(crate) fn strip_count(album_id: u64, scramble_id: &str, file_stem: &str) -> usize {
+/// `chapter_id` is the **chapter** id, not the album id: the reader takes the
+/// id from the `/reader/<id>` route and feeds it both to the image path and to
+/// this formula. The two only coincide for a single-chapter album, so using
+/// the album id silently re-serves the first chapter of a multi-chapter one.
+///
+/// Mirrors the reader's own helper: the seed is `chapter id + file stem`, and
+/// the band count is read out of character 31 of the *hex* digest — an ASCII
+/// code, not a decoded byte.
+pub(crate) fn strip_count(chapter_id: u64, scramble_id: &str, file_stem: &str) -> usize {
 	// `scramble_id` doubles as the lower bound for scrambling; the reader
 	// falls back to 220980 when it is missing or not numeric.
 	let floor = match parse_u64(scramble_id) {
 		Some(value) if value != 0 => value,
 		_ => 220980,
 	};
-	if album_id < floor {
+	if chapter_id < floor {
 		return 0;
 	}
-	if album_id < 268_850 {
+	if chapter_id < 268_850 {
 		return 10;
 	}
 
 	let mut seed = String::new();
-	seed.push_str(&format!("{}", album_id));
+	seed.push_str(&format!("{}", chapter_id));
 	seed.push_str(file_stem);
 	let hex = md5::hex(seed.as_bytes());
 	let code = hex[31] as char as u32;
 
-	let base = if album_id > 421_926 { 8 } else { 10 };
+	let base = if chapter_id > 421_926 { 8 } else { 10 };
 	((code % base) * 2 + 2) as usize
 }
 
@@ -55,8 +59,8 @@ pub(crate) fn strip_count(album_id: u64, scramble_id: &str, file_stem: &str) -> 
 /// Returns the image untouched when the page is not scrambled, when the
 /// context is missing, or when the geometry rules out any banding.
 pub(crate) fn unscramble(image: ImageRef, context: &HashMap<String, String>) -> ImageRef {
-	let (Some(album), Some(scramble), Some(name)) = (
-		context.get(CTX_ALBUM).and_then(|v| parse_u64(v)),
+	let (Some(chapter), Some(scramble), Some(name)) = (
+		context.get(CTX_CHAPTER).and_then(|v| parse_u64(v)),
 		context.get(CTX_SCRAMBLE).map(String::as_str),
 		context.get(CTX_NAME).map(String::as_str),
 	) else {
@@ -70,7 +74,7 @@ pub(crate) fn unscramble(image: ImageRef, context: &HashMap<String, String>) -> 
 	}
 
 	let stem = name.rsplit_once('.').map(|(base, _)| base).unwrap_or(name);
-	let bands = strip_count(album, scramble, stem);
+	let bands = strip_count(chapter, scramble, stem);
 	let total_h = height as u32;
 	if bands <= 1 || total_h < bands as u32 * 2 {
 		return image;
