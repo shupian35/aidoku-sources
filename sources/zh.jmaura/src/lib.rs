@@ -1,11 +1,12 @@
 #![no_std]
 
 use aidoku::{
-	AidokuError, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult, DynamicFilters,
-	DynamicSettings, Filter, FilterValue, Home, HomeComponent, HomeComponentValue, HomeLayout,
-	HomePartialResult, ImageRequestProvider, ImageResponse, Link, LinkValue, Listing, ListingKind,
-	ListingProvider, Manga, MangaPageResult, MangaStatus, Page, PageContent, PageContext,
-	PageImageProcessor, Result, SelectFilter, Setting, SortFilter, Source, TextSetting, Viewer,
+	AidokuError, BasicLoginHandler, Chapter, ContentRating, DeepLinkHandler, DeepLinkResult,
+	DynamicFilters, DynamicSettings, Filter, FilterValue, Home, HomeComponent, HomeComponentValue,
+	HomeLayout, HomePartialResult, ImageRequestProvider, ImageResponse, Link, LinkValue, Listing,
+	ListingKind, ListingProvider, LoginMethod, LoginSetting, Manga, MangaPageResult, MangaStatus,
+	Page, PageContent, PageContext, PageImageProcessor, Result, SegmentSetting, SelectFilter,
+	Setting, SortFilter, Source, TextSetting, Viewer,
 	alloc::{String, Vec, borrow::Cow, format, string::ToString, vec},
 	imports::canvas::ImageRef,
 	imports::net::Request,
@@ -14,6 +15,7 @@ use aidoku::{
 };
 
 mod api;
+mod flavor;
 mod md5;
 mod scramble;
 mod source_url;
@@ -198,9 +200,8 @@ impl Source for JmAura {
 impl ListingProvider for JmAura {
 	fn get_manga_list(&self, listing: Listing, page: i32) -> Result<MangaPageResult> {
 		let entries: Vec<Manga> = match listing.id.as_str() {
-			"latest" => api::latest(page)?.iter().map(latest_to_manga).collect(),
-			// The random endpoint is a single unpaginated batch of ten.
 			"random" => api::random()?.iter().map(summary_to_manga).collect(),
+			"latest" => latest_entries(page)?,
 			// "leaderboard" and any unknown id fall back to the default ranking.
 			_ => api::leaderboard("mr", ALL_CATEGORIES, page)?
 				.iter()
@@ -215,6 +216,21 @@ impl ListingProvider for JmAura {
 	}
 }
 
+/// Entries for the "newest uploads" surface.
+///
+/// `/api/latest` is the site's own feed: it is not namespaced by catalogue and
+/// only ever carries the public one. Under the secondary catalogue it would
+/// show a mix of both, so the namespaced ranking is used instead.
+fn latest_entries(page: i32) -> Result<Vec<Manga>> {
+	if flavor::needs_session() {
+		return Ok(api::leaderboard("mr", ALL_CATEGORIES, page)?
+			.iter()
+			.map(summary_to_manga)
+			.collect());
+	}
+	Ok(api::latest(page)?.iter().map(latest_to_manga).collect())
+}
+
 impl Home for JmAura {
 	fn get_home(&self) -> Result<HomeLayout> {
 		let mut layout = HomeLayout::default();
@@ -222,12 +238,15 @@ impl Home for JmAura {
 		// instead of waiting for every request to finish.
 		send_partial_result(&HomePartialResult::Layout(layout.clone()));
 
-		if let Ok(items) = api::latest(1) {
+		if let Ok(items) = latest_entries(1) {
 			let component = HomeComponent {
 				title: Some(String::from("最新上架")),
 				subtitle: None,
 				value: HomeComponentValue::Scroller {
-					entries: items.iter().map(latest_to_link).collect(),
+					entries: items
+						.iter()
+						.map(|item| manga_to_link(item.clone()))
+						.collect(),
 					listing: Some(Listing {
 						id: String::from("latest"),
 						name: String::from("最新上架"),
@@ -329,7 +348,21 @@ impl DynamicFilters for JmAura {
 
 impl DynamicSettings for JmAura {
 	fn get_dynamic_settings(&self) -> Result<Vec<Setting>> {
-		Ok(vec![
+		let mut settings = vec![
+			// The site fronts two catalogues; the secondary one needs a session,
+			// so switching refreshes every listing rather than just the page.
+			SegmentSetting {
+				key: flavor::FLAVOR_KEY.into(),
+				title: "内容源".into(),
+				options: flavor::FLAVORS
+					.iter()
+					.map(|(_, name)| Cow::Owned(String::from(*name)))
+					.collect(),
+				default: Some(flavor_index()),
+				refreshes: Some(vec!["content".into(), "listings".into()]),
+				..Default::default()
+			}
+			.into(),
 			TextSetting {
 				key: "base_url".into(),
 				title: "自定义网址".into(),
@@ -338,7 +371,38 @@ impl DynamicSettings for JmAura {
 				..Default::default()
 			}
 			.into(),
-		])
+		];
+
+		// Only offer the login control when the secondary catalogue is selected,
+		// so the public path stays a single-tap experience.
+		if flavor::needs_session() {
+			settings.push(
+				LoginSetting {
+					key: "session".into(),
+					title: "禁漫天堂账号".into(),
+					method: LoginMethod::Basic,
+					use_email: true,
+					..Default::default()
+				}
+				.into(),
+			);
+		}
+
+		Ok(settings)
+	}
+}
+
+/// Maps the stored catalogue to its index in the settings segment.
+fn flavor_index() -> i32 {
+	if flavor::needs_session() { 1 } else { 0 }
+}
+
+// ---------- Login ----------
+
+impl BasicLoginHandler for JmAura {
+	fn handle_basic_login(&self, _key: String, username: String, password: String) -> Result<bool> {
+		flavor::login(&username, &password)?;
+		Ok(true)
 	}
 }
 
@@ -406,6 +470,7 @@ register_source!(
 	Home,
 	DynamicFilters,
 	DynamicSettings,
+	BasicLoginHandler,
 	DeepLinkHandler,
 	PageImageProcessor,
 	ImageRequestProvider
@@ -433,14 +498,7 @@ fn summary_to_manga(summary: &api::Summary) -> Manga {
 }
 
 fn summary_to_link(summary: &api::Summary) -> Link {
-	let manga = summary_to_manga(summary);
-	let cover = manga.cover.clone();
-	Link {
-		title: manga.title.clone(),
-		subtitle: manga.authors.clone().map(|authors| authors.join(", ")),
-		image_url: cover,
-		value: Some(LinkValue::Manga(manga)),
-	}
+	manga_to_link(summary_to_manga(summary))
 }
 
 fn latest_to_manga(item: &api::LatestItem) -> Manga {
@@ -465,12 +523,13 @@ fn latest_to_manga(item: &api::LatestItem) -> Manga {
 	}
 }
 
-fn latest_to_link(item: &api::LatestItem) -> Link {
-	let manga = latest_to_manga(item);
+/// Wraps a manga for the home components, which want a link rather than an entry.
+fn manga_to_link(manga: Manga) -> Link {
 	let cover = manga.cover.clone();
+	let subtitle = manga.authors.clone().map(|authors| authors.join(", "));
 	Link {
 		title: manga.title.clone(),
-		subtitle: manga.authors.clone().map(|authors| authors.join(", ")),
+		subtitle,
 		image_url: cover,
 		value: Some(LinkValue::Manga(manga)),
 	}

@@ -2,10 +2,14 @@
 //! likely to break silently, so it is pinned here against values confirmed by
 //! measuring real page images: a correct count puts a discontinuity at every
 //! band boundary of the scrambled file and none in the reassembled one.
+//!
+//! The session-cookie handling for the secondary catalogue is covered too:
+//! it cannot be exercised without an account, so the parsing is pinned here.
 
 use aidoku::alloc::{String, format, vec::Vec};
 use aidoku_test::aidoku_test;
 
+use crate::flavor::{cookie_pair, escape};
 use crate::md5;
 use crate::scramble::strip_count;
 
@@ -109,4 +113,42 @@ fn missing_scramble_id_falls_back_to_the_default_threshold() {
 		strip_count(1_114_751, "abc", "00001"),
 		strip_count(1_114_751, "220980", "00001")
 	);
+}
+
+#[aidoku_test]
+fn cookie_pair_keeps_only_the_name_value() {
+	// The attributes after `;` are response-only and must not be replayed.
+	assert_eq!(
+		cookie_pair("session=abc123; Path=/; HttpOnly; SameSite=Lax").as_deref(),
+		Some("session=abc123")
+	);
+	assert_eq!(
+		cookie_pair("session=abc123").as_deref(),
+		Some("session=abc123")
+	);
+}
+
+#[aidoku_test]
+fn cookie_pair_takes_the_first_of_several_headers() {
+	// A response can set more than one cookie; only the first is the session.
+	let raw = "session=first; Path=/, tracking=second; Path=/";
+	assert_eq!(cookie_pair(raw).as_deref(), Some("session=first"));
+}
+
+#[aidoku_test]
+fn cookie_pair_rejects_values_without_a_name() {
+	assert!(cookie_pair("").is_none());
+	assert!(cookie_pair("   ").is_none());
+	assert!(cookie_pair("HttpOnly").is_none());
+	assert!(cookie_pair("=novalue").is_none());
+}
+
+#[aidoku_test]
+fn escape_protects_the_login_body() {
+	// A quote or backslash in a password must not be able to break out of the
+	// JSON string that carries it.
+	assert_eq!(escape("pass\"word"), "pass\\\"word");
+	assert_eq!(escape("back\\slash"), "back\\\\slash");
+	assert_eq!(escape("line\nbreak"), "line break");
+	assert_eq!(escape("plain-password-123"), "plain-password-123");
 }

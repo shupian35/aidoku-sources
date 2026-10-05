@@ -4,6 +4,10 @@
 //! raw upstream shapes, and numeric ids sometimes arrive as JSON numbers and
 //! sometimes as strings. Every field is therefore optional and the string
 //! helpers accept numbers, booleans and arrays of strings as well.
+//!
+//! Endpoints are namespaced by catalogue: `/api/v2/jm/…` or `/api/v2/bika/…`.
+//! The segment is resolved per request from the user's selection, and the
+//! secondary catalogue additionally needs the stored session cookie.
 
 use aidoku::{
 	Result,
@@ -13,7 +17,13 @@ use aidoku::{
 	serde::{Deserialize, de::DeserializeOwned},
 };
 
+use crate::flavor;
 use crate::source_url::{USER_AGENT, get_base_url};
+
+/// Builds a namespaced endpoint URL for the selected catalogue.
+fn v2(path: &str) -> String {
+	format!("{}/api/v2/{}/{}", get_base_url(), flavor::flavor(), path)
+}
 
 /// The API's standard `{data, msg, st}` envelope.
 #[derive(Deserialize)]
@@ -148,20 +158,15 @@ impl ChapterPages {
 
 /// Queries the search endpoint. `q` is matched against title, author and id.
 pub(crate) fn search(query: &str, page: i32) -> Result<Vec<Summary>> {
-	let url = format!(
-		"{}/api/v2/jm/search?q={}&page={}",
-		get_base_url(),
-		encode_uri(query),
-		page
-	);
+	let url = format!("{}?q={}&page={}", v2("search"), encode_uri(query), page);
 	unwrap(Envelope::<Vec<Summary>>::fetch(&url)?)
 }
 
 /// Fetches a category listing. `category` `"0"` means "all".
 pub(crate) fn leaderboard(sort: &str, category: &str, page: i32) -> Result<Vec<Summary>> {
 	let url = format!(
-		"{}/api/v2/jm/leaderboard?sort={}&category={}&page={}",
-		get_base_url(),
+		"{}?sort={}&category={}&page={}",
+		v2("leaderboard"),
 		encode_uri(sort),
 		encode_uri(category),
 		page
@@ -171,11 +176,13 @@ pub(crate) fn leaderboard(sort: &str, category: &str, page: i32) -> Result<Vec<S
 
 /// Returns ten random entries.
 pub(crate) fn random() -> Result<Vec<Summary>> {
-	let url = format!("{}/api/v2/jm/random", get_base_url());
-	unwrap(Envelope::<Vec<Summary>>::fetch(&url)?)
+	unwrap(Envelope::<Vec<Summary>>::fetch(&v2("random"))?)
 }
 
-/// Fetches the most recently uploaded albums. This endpoint is not enveloped.
+/// Fetches the most recently uploaded albums.
+///
+/// This endpoint is not namespaced and is not enveloped: it is the site's own
+/// feed, which only ever carries the public catalogue.
 pub(crate) fn latest(page: i32) -> Result<Vec<LatestItem>> {
 	let url = format!("{}/api/latest?page={}", get_base_url(), page);
 	get_json::<Vec<LatestItem>>(&url)
@@ -183,19 +190,18 @@ pub(crate) fn latest(page: i32) -> Result<Vec<LatestItem>> {
 
 /// Fetches the full category tree.
 pub(crate) fn categories() -> Result<Vec<Category>> {
-	let url = format!("{}/api/v2/jm/categories", get_base_url());
-	unwrap(Envelope::<Vec<Category>>::fetch(&url)?)
+	unwrap(Envelope::<Vec<Category>>::fetch(&v2("categories"))?)
 }
 
 /// Fetches details and the chapter list for one album.
 pub(crate) fn comic(id: &str) -> Result<Comic> {
-	let url = format!("{}/api/v2/jm/comic/{}", get_base_url(), encode_uri(id));
+	let url = v2(&format!("comic/{}", encode_uri(id)));
 	unwrap(Envelope::<Comic>::fetch(&url)?)
 }
 
 /// Fetches the page list for one chapter.
 pub(crate) fn chapter(id: &str) -> Result<ChapterPages> {
-	let url = format!("{}/api/v2/jm/chapter/{}", get_base_url(), encode_uri(id));
+	let url = v2(&format!("chapter/{}", encode_uri(id)));
 	unwrap(Envelope::<ChapterPages>::fetch(&url)?)
 }
 
@@ -219,10 +225,19 @@ fn get_json<T: DeserializeOwned>(url: &str) -> Result<T> {
 	request.set_header("User-Agent", USER_AGENT);
 	request.set_header("Accept", "application/json");
 	request.set_header("Referer", &referer);
+	// The secondary catalogue is only served to a signed-in session, and
+	// Aidoku keeps no cookies between requests, so the stored one is replayed
+	// on every call.
+	if let Some(cookie) = flavor::session() {
+		request.set_header("Cookie", &cookie);
+	}
 	request.json_owned()
 }
 
 /// Unwraps an envelope, turning the API's own error string into a Rust error.
+///
+/// The upstream's "login expired" message is replaced with one that says what
+/// the reader actually has to do about it.
 fn unwrap<T>(envelope: Envelope<T>) -> Result<T> {
 	match envelope.data {
 		Some(data) => Ok(data),
@@ -232,6 +247,15 @@ fn unwrap<T>(envelope: Envelope<T>) -> Result<T> {
 			} else {
 				envelope.msg
 			};
+			if flavor::needs_session() {
+				return Err(aidoku::AidokuError::message(
+					if flavor::session().is_some() {
+						"哔咔登录已失效，请在源设置中重新登录"
+					} else {
+						"哔咔需要登录，请在源设置中登录禁漫账号"
+					},
+				));
+			}
 			Err(aidoku::AidokuError::message(msg))
 		}
 	}
