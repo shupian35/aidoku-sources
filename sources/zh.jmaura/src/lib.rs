@@ -27,11 +27,11 @@ use source_url::{BASE_URL, get_base_url, image_request};
 /// The `category` value that means "no category filter".
 const ALL_CATEGORIES: &str = "0";
 
-struct JmComic;
+struct JmAura;
 
 // ---------- Search and browse ----------
 
-impl Source for JmComic {
+impl Source for JmAura {
 	fn new() -> Self {
 		Self
 	}
@@ -195,7 +195,7 @@ impl Source for JmComic {
 
 // ---------- Listings ----------
 
-impl ListingProvider for JmComic {
+impl ListingProvider for JmAura {
 	fn get_manga_list(&self, listing: Listing, page: i32) -> Result<MangaPageResult> {
 		let entries: Vec<Manga> = match listing.id.as_str() {
 			"latest" => api::latest(page)?.iter().map(latest_to_manga).collect(),
@@ -215,7 +215,7 @@ impl ListingProvider for JmComic {
 	}
 }
 
-impl Home for JmComic {
+impl Home for JmAura {
 	fn get_home(&self) -> Result<HomeLayout> {
 		let mut layout = HomeLayout::default();
 		// An empty layout first, so the app can render sections as they arrive
@@ -273,7 +273,7 @@ impl Home for JmComic {
 
 // ---------- Filters and settings ----------
 
-impl DynamicFilters for JmComic {
+impl DynamicFilters for JmAura {
 	fn get_dynamic_filters(&self) -> Result<Vec<Filter>> {
 		let mut filters = vec![
 			SortFilter {
@@ -327,7 +327,7 @@ impl DynamicFilters for JmComic {
 	}
 }
 
-impl DynamicSettings for JmComic {
+impl DynamicSettings for JmAura {
 	fn get_dynamic_settings(&self) -> Result<Vec<Setting>> {
 		Ok(vec![
 			TextSetting {
@@ -344,7 +344,7 @@ impl DynamicSettings for JmComic {
 
 // ---------- Deep links ----------
 
-impl DeepLinkHandler for JmComic {
+impl DeepLinkHandler for JmAura {
 	fn handle_deep_link(&self, url: String) -> Result<Option<DeepLinkResult>> {
 		// Album pages are `/comic/<id>`; a `cid` query selects one chapter.
 		let Some(rest) = url.split("/comic/").nth(1) else {
@@ -375,7 +375,7 @@ impl DeepLinkHandler for JmComic {
 
 // ---------- Images ----------
 
-impl PageImageProcessor for JmComic {
+impl PageImageProcessor for JmAura {
 	fn process_page_image(
 		&self,
 		response: ImageResponse,
@@ -389,7 +389,7 @@ impl PageImageProcessor for JmComic {
 	}
 }
 
-impl ImageRequestProvider for JmComic {
+impl ImageRequestProvider for JmAura {
 	fn get_image_request(&self, url: String, _context: Option<PageContext>) -> Result<Request> {
 		image_request(&url)
 	}
@@ -401,7 +401,7 @@ impl ImageRequestProvider for JmComic {
 // checks the three mandatory functions). Verify the export list after any
 // change, e.g. by grepping the built wasm for the handler symbols.
 register_source!(
-	JmComic,
+	JmAura,
 	ListingProvider,
 	Home,
 	DynamicFilters,
