@@ -4,9 +4,9 @@
     {
       "id": "zh.jmcomic",
       "name": "JM Comic",
-      "version": 1,
-      "iconURL": "icons/zh.jmcomic-v1.png",
-      "downloadURL": "sources/zh.jmcomic-v1.aix",
+      "version": 2,
+      "iconURL": "icons/zh.jmcomic-v2.png",
+      "downloadURL": "sources/zh.jmcomic-v2.aix",
       "languages": [
         "zh"
       ],
